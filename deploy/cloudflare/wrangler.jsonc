@@ -1,0 +1,55 @@
+{
+  // SalesFactory on Cloudflare Containers.
+  // Run `wrangler deploy` from this directory (deploy/cloudflare). The build
+  // context for the Dockerfiles is the repo root, two levels up.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "salesfactory",
+  "main": "worker.js",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "containers": [
+    {
+      "class_name": "FiscalContainer",
+      "image": "./fiscal.Dockerfile",
+      "image_build_context": "../../",
+      "instances": 1,
+      "max_instances": 3
+    },
+    {
+      "class_name": "PaymentsContainer",
+      "image": "./payments.Dockerfile",
+      "image_build_context": "../../",
+      "instances": 1,
+      "max_instances": 3
+    },
+    {
+      "class_name": "CatalogContainer",
+      "image": "./catalog.Dockerfile",
+      "image_build_context": "../../",
+      "instances": 1,
+      "max_instances": 3
+    }
+  ],
+
+  // Durable Object bindings back each container class.
+  "durable_objects": {
+    "bindings": [
+      { "name": "FISCAL", "class_name": "FiscalContainer" },
+      { "name": "PAYMENTS", "class_name": "PaymentsContainer" },
+      { "name": "CATALOG", "class_name": "CatalogContainer" }
+    ]
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FiscalContainer", "PaymentsContainer", "CatalogContainer"]
+    }
+  ]
+
+  // DATABASE_URL and API_USERS are set as secrets, not committed here:
+  //   wrangler secret put DATABASE_URL
+  //   wrangler secret put API_USERS
+  // and forwarded into the containers (see README).
+}

@@ -63,4 +63,25 @@ Open `web/demo.html` (served statically) to see the `<sf-storefront>` component
 talking to `catalogd`. The component emits an `sf-checkout` event that a host
 app wires to the payments gateway and then the fiscal service.
 
+## Persistence & auth
+
+Each service selects its store at startup: `DATABASE_URL` set → Postgres
+(`libs/pg`, migrations run on boot); unset → in-memory (dev). `API_USERS`
+(`user:pass,...`) enables HTTP Basic Auth via `libs/httpx`; unset → auth off
+with a warning. Public storefront reads (`GET /sellers/{handle}`) stay
+unauthenticated so the Web Component can load.
+
+## Deployment
+
+- **Single host / VPS:** `deploy/docker-compose.yml` brings up Postgres + the
+  three services + the static frontend. See `deploy/.env.example`.
+- **Cloudflare Containers:** `deploy/cloudflare/` — a Worker routes by path
+  prefix to one container per service, with Postgres hosted externally (Neon)
+  reached over the container's outbound network. See its README. (Workers
+  cannot run Go `net/http`; Containers run the real images.)
+
+Container images are tiny static binaries on distroless/nonroot — fast to pull
+on low-bandwidth links. Verified locally with podman (build, run, Postgres
+persistence, auth).
+
 See each `services/<name>/README.md` for product-specific details.
