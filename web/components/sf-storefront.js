@@ -23,15 +23,18 @@ class SfStorefront extends HTMLElement {
   connectedCallback() { this.load(); }
   attributeChangedCallback() { if (this.isConnected) this.load(); }
 
-  get api() { return this.getAttribute("api") || ""; }
+  // `api` is the worker origin (e.g. http://localhost:8799). The catalog is
+  // mounted under /catalog on the edge Worker.
+  get api() { return (this.getAttribute("api") || "").replace(/\/$/, ""); }
   get handle() { return this.getAttribute("handle") || ""; }
   get cacheKey() { return `sf-storefront:${this.handle}`; }
+  get endpoint() { return `${this.api}/catalog/sellers/${encodeURIComponent(this.handle)}`; }
 
   async load() {
     if (!this.handle) { this.renderError("No storefront handle provided."); return; }
     this.renderLoading();
     try {
-      const res = await fetch(`${this.api}/sellers/${encodeURIComponent(this.handle)}`);
+      const res = await fetch(this.endpoint);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       try { localStorage.setItem(this.cacheKey, JSON.stringify(data)); } catch (_) {}
@@ -162,16 +165,18 @@ class SfStorefront extends HTMLElement {
       .logo { width:64px; height:64px; border-radius:12px; object-fit:cover; background:#fff; }
       .tagline { margin:.25rem 0 0; opacity:.9; }
       .socials a { color:#fff; margin-right:.75rem; font-size:.85rem; }
-      main.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:1rem; padding:1rem; }
-      main.list { display:flex; flex-direction:column; gap:.75rem; padding:1rem; }
-      .product { border:1px solid #e3e3e3; border-radius:12px; padding:.75rem; background:#fff; }
+      main.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:1rem; padding:1rem; max-width:1100px; margin:0 auto; }
+      main.list { display:flex; flex-direction:column; gap:.75rem; padding:1rem; max-width:1100px; margin:0 auto; }
+      .product { display:flex; flex-direction:column; border:1px solid #e7e7e7; border-radius:12px; padding:.75rem; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.05); }
       .thumb { aspect-ratio:1; display:grid; place-items:center; background:#f3f3f3; border-radius:8px; font-size:2rem; overflow:hidden; }
       .thumb img { width:100%; height:100%; object-fit:cover; }
-      .product h3 { font-size:1rem; margin:.5rem 0 .25rem; }
+      .product h3 { font-size:1rem; line-height:1.3; margin:.6rem 0 .25rem; }
       .desc { font-size:.8rem; color:#666; margin:0 0 .5rem; }
-      .row { display:flex; justify-content:space-between; align-items:center; }
-      .price { font-weight:600; }
-      button { background:var(--a); color:#fff; border:0; border-radius:8px; padding:.4rem .8rem; cursor:pointer; }
+      /* Pin the price+action row to the bottom so cards of differing heights align. */
+      .row { display:flex; justify-content:space-between; align-items:center; gap:.75rem; margin-top:auto; padding-top:.6rem; }
+      .price { font-weight:700; white-space:nowrap; }
+      button { background:var(--a); color:#fff; border:0; border-radius:8px; padding:.45rem .9rem; font-size:.85rem; font-weight:600; cursor:pointer; white-space:nowrap; }
+      button:hover:not(:disabled) { filter:brightness(1.07); }
       button:disabled { background:#bbb; cursor:not-allowed; }
       .cart { position:sticky; bottom:0; background:#fff; border-top:2px solid var(--p); padding:1rem; }
       .cart ul { margin:.5rem 0; padding-left:1.2rem; }

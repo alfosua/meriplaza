@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es-VE">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SalesFactory — Mercado de Venezuela</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #f6f7f9; }
+    #back {
+      display: none; position: sticky; top: 0; z-index: 10;
+      width: 100%; border: 0; padding: .7rem 1rem; text-align: left;
+      background: #10141b; color: #fff; font: 600 .95rem system-ui, sans-serif; cursor: pointer;
+    }
+    #view { min-height: 100%; }
+  </style>
+</head>
+<body>
+  <!--
+    Unified platform shell: shows the marketplace (all stores), and when a store
+    is opened, swaps to that seller's personal <sf-storefront>. Point `api` at a
+    running edge Worker (wrangler dev defaults to :8799).
+  -->
+  <button id="back">← Volver al mercado</button>
+  <div id="view">
+    <sf-marketplace id="market" api="http://localhost:8799"></sf-marketplace>
+  </div>
+
+  <script type="module" src="./components/sf-marketplace.js"></script>
+  <script type="module" src="./components/sf-storefront.js"></script>
+  <script type="module">
+    const API = "http://localhost:8799";
+    const view = document.getElementById("view");
+    const back = document.getElementById("back");
+
+    function showMarket() {
+      back.style.display = "none";
+      view.innerHTML = `<sf-marketplace api="${API}"></sf-marketplace>`;
+    }
+    function showStore(handle) {
+      back.style.display = "block";
+      view.innerHTML = `<sf-storefront handle="${handle}" api="${API}"></sf-storefront>`;
+    }
+
+    // Hash is the single source of truth for which view is shown, so deep links
+    // and browser back/forward both work.
+    function route() {
+      const m = location.hash.match(/#\/tienda\/(.+)$/);
+      if (m) showStore(decodeURIComponent(m[1]));
+      else showMarket();
+    }
+    window.addEventListener("hashchange", route);
+
+    document.addEventListener("sf-open-store", (e) => { location.hash = `#/tienda/${e.detail.handle}`; });
+    document.addEventListener("sf-checkout", (e) => {
+      console.log("checkout requested", e.detail);
+      alert(`Pagar ${e.detail.total} ${e.detail.currency} (${e.detail.items.length} líneas)`);
+    });
+    back.addEventListener("click", () => { location.hash = ""; });
+
+    route(); // initial render from the current hash
+  </script>
+</body>
+</html>

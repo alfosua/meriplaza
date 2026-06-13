@@ -12,6 +12,38 @@ const STOREFRONT_TTL = 60; // seconds (KV minimum); edits also bust the cache ex
 
 export const catalog = new Hono<{ Bindings: Env }>();
 
+// --- unified marketplace (Amazon-like, across all sellers) ---
+
+// List all storefronts for the marketplace landing page.
+catalog.get("/marketplace", async (c) => {
+  const cached = await c.env.CACHE.get("marketplace");
+  if (cached) return new Response(cached, { headers: { "content-type": "application/json", "x-cache": "HIT" } });
+
+  const { results } = await c.env.DB.prepare(`SELECT s.doc AS doc,
+      (SELECT COUNT(*) FROM products p WHERE p.seller_id = s.id AND p.active = 1) AS product_count
+      FROM sellers s ORDER BY s.created_at`).all<{ doc: string; product_count: number }>();
+  const sellers = (results ?? []).map((r) => {
+    const s = JSON.parse(r.doc);
+    return { id: s.id, handle: s.handle, name: s.name, kind: s.kind, theme: s.theme, socials: s.socials, currency: s.currency, productCount: r.product_count };
+  });
+  const payload = JSON.stringify({ sellers });
+  await c.env.CACHE.put("marketplace", payload, { expirationTtl: 60 });
+  return new Response(payload, { headers: { "content-type": "application/json", "x-cache": "MISS" } });
+});
+
+// Unified product search across every store.
+catalog.get("/products", async (c) => {
+  const q = (c.req.query("q") ?? "").trim().toLowerCase();
+  const { results } = await c.env.DB.prepare(
+    `SELECT p.doc AS doc, p.stock AS stock, s.handle AS seller_handle, s.name AS seller_name
+       FROM products p JOIN sellers s ON s.id = p.seller_id
+      WHERE p.active = 1`,
+  ).all<{ doc: string; stock: number; seller_handle: string; seller_name: string }>();
+  let items = (results ?? []).map((r) => ({ ...JSON.parse(r.doc), stock: r.stock, sellerHandle: r.seller_handle, sellerName: r.seller_name }));
+  if (q) items = items.filter((p) => p.title.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q));
+  return c.json({ query: q, count: items.length, products: items });
+});
+
 // --- sellers ---
 
 catalog.post("/sellers", async (c) => {
@@ -48,6 +80,7 @@ catalog.post("/sellers", async (c) => {
     }
     throw e;
   }
+  await c.env.CACHE.delete("marketplace");
   return c.json(seller, 201);
 });
 
@@ -102,8 +135,9 @@ catalog.post("/sellers/:id/products", async (c) => {
   await c.env.DB.prepare(`INSERT INTO products (id, seller_id, stock, active, doc) VALUES (?, ?, ?, ?, ?)`)
     .bind(product.id, sellerId, product.stock, product.active ? 1 : 0, JSON.stringify(product))
     .run();
-  // Invalidate the storefront cache so the new product appears.
+  // Invalidate caches so the new product appears.
   await c.env.CACHE.delete(`storefront:${sellerDoc.handle}`);
+  await c.env.CACHE.delete("marketplace");
   return c.json(product, 201);
 });
 

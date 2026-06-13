@@ -8,11 +8,21 @@
 // storefront reads (GET /catalog/sellers/{handle}) and /healthz.
 
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import type { Env } from "./lib/env.ts";
 import { catalog } from "./catalog/routes.ts";
 import { payments } from "./payments/routes.ts";
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Browser storefronts call this API cross-origin. Allow it; auth still gates
+// writes via the Authorization header.
+app.use("*", cors({
+  origin: (o) => o ?? "*",
+  allowMethods: ["GET", "HEAD", "POST", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
+  maxAge: 86400,
+}));
 
 app.get("/healthz", (c) => c.json({ status: "ok", products: ["catalog", "payments"] }));
 app.get("/", (c) => c.json({ status: "ok", products: ["catalog", "payments"] }));
