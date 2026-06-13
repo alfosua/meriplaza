@@ -1,0 +1,35 @@
+{
+  "environment": "test",
+  "document": {
+    "type": "invoice",
+    "displayName": "FACTURA",
+    "currency": "VES",
+    "emissionChannel": "digital_authorized_provider"
+  },
+  "issuer": {
+    "personType": "company",
+    "identifier": { "prefix": "J", "number": "09512461", "value": "J-09512461-4" },
+    "company": { "razonSocial": "CENTRAL SANTO TOME III, C.A", "commercialName": "Central Santo Tome" },
+    "address": { "lines": ["Av Atlantico CC Santo Tome"], "city": "Puerto Ordaz", "country": "VE" }
+  },
+  "customer": {
+    "personType": "natural_person",
+    "identifier": { "prefix": "V", "number": "28476588", "value": "V-28476588" },
+    "naturalPerson": { "firstName": "ALFONZO", "firstLastName": "SUAREZ", "displayName": "ALFONZO SUAREZ" }
+  },
+  "items": [
+    {
+      "lineNumber": 1,
+      "description": "MARI/PAM/CHOC/100G",
+      "quantity": "2",
+      "unitPrice": { "amount": "300.33", "currency": "VES" },
+      "taxCategory": { "code": "G", "type": "general", "rate": "16.00" }
+    }
+  ],
+  "payments": [
+    { "method": "cash", "amount": { "amount": "696.77", "currency": "VES" }, "currency": "VES" }
+  ],
+  "footer": {
+    "messages": ["GRACIAS POR PREFERIRNOS", "MAXIMO 1 DIA PARA DEVOLUCIONES TICKET REQUERIDO"]
+  }
+}
