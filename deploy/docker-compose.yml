@@ -1,0 +1,77 @@
+# Local / single-host deployment of the full SalesFactory platform.
+#
+#   cp deploy/.env.example deploy/.env   # then edit secrets
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up --build
+#
+# Brings up Postgres + the three Go services + the static frontend. Each service
+# runs its own migrations on startup against the shared database.
+
+name: salesfactory
+
+services:
+  db:
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-salesfactory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-salesfactory}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-salesfactory}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  fiscal:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { SERVICE: fiscal }
+    environment:
+      FISCAL_ADDR: ":8081"
+      DATABASE_URL: ${DATABASE_URL}
+      API_USERS: ${API_USERS:?set API_USERS}
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["8081:8081"]
+    restart: unless-stopped
+
+  payments:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { SERVICE: payments }
+    environment:
+      PAYMENTS_ADDR: ":8082"
+      DATABASE_URL: ${DATABASE_URL}
+      API_USERS: ${API_USERS:?set API_USERS}
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["8082:8082"]
+    restart: unless-stopped
+
+  catalog:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { SERVICE: catalog }
+    environment:
+      CATALOG_ADDR: ":8083"
+      DATABASE_URL: ${DATABASE_URL}
+      API_USERS: ${API_USERS:?set API_USERS}
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["8083:8083"]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    ports: ["8080:80"]
+    restart: unless-stopped
+
+volumes:
+  dbdata:
