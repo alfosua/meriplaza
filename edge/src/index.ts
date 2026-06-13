@@ -66,17 +66,19 @@ function isPublic(method: string, path: string): boolean {
   if (path === "/healthz" || path === "/") return true;
 
   // Customer write actions (public): place an order, create/confirm/cancel a
-  // payment. NOT mark-paid (that's a back-office/webhook action).
+  // payment, write a product review. NOT mark-paid (back-office/webhook).
   if (method === "POST") {
     if (path === "/catalog/orders") return true;
+    if (/^\/catalog\/products\/[^/]+\/reviews$/.test(path)) return true;
     if (path === "/payments/payment_intents") return true;
     if (/^\/payments\/payment_intents\/[^/]+\/(confirm|cancel)$/.test(path)) return true;
     return false;
   }
 
   if (method !== "GET" && method !== "HEAD") return false;
-  // Public reads: marketplace, product search, a storefront, an order, an intent.
+  // Public reads: marketplace, product search/detail, storefront, order, intent.
   if (path === "/catalog/marketplace" || path === "/catalog/products") return true;
+  if (/^\/catalog\/products\/[^/]+$/.test(path)) return true;        // GET /catalog/products/{slug}
   if (/^\/catalog\/sellers\/[^/]+$/.test(path)) return true;        // GET /catalog/sellers/{handle}
   if (/^\/catalog\/orders\/[^/]+$/.test(path)) return true;          // GET /catalog/orders/{id}
   if (/^\/payments\/payment_intents\/[^/]+$/.test(path)) return true; // GET /payments/payment_intents/{id}
