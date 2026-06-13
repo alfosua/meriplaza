@@ -12,7 +12,7 @@
       "binding": "DB",
       "database_name": "salesfactory",
       // Replace with the id printed by: wrangler d1 create salesfactory
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "fe7bc7a2-1063-4b61-8b1b-4aee64f26d8a",
       "migrations_dir": "migrations"
     }
   ],
@@ -21,7 +21,7 @@
     {
       "binding": "CACHE",
       // Replace with the id printed by: wrangler kv namespace create CACHE
-      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
+      "id": "3c57cbe7dd8840f984c51a141788d569"
     }
   ]
 

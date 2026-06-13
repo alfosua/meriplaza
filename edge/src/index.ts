@@ -61,7 +61,9 @@ function parseCreds(v: string): Map<string, string> {
 function isPublic(method: string, path: string): boolean {
   if (path === "/healthz" || path === "/") return true;
   if (method !== "GET" && method !== "HEAD") return false;
-  // GET /catalog/sellers/{handle} — single segment after the prefix.
+  // Public browse: the marketplace landing and cross-store product search.
+  if (path === "/catalog/marketplace" || path === "/catalog/products") return true;
+  // GET /catalog/sellers/{handle} — a single storefront (one path segment).
   const pre = "/catalog/sellers/";
   if (path.startsWith(pre)) {
     const rest = path.slice(pre.length).replace(/\/+$/, "");
