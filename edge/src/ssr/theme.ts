@@ -200,5 +200,20 @@ footer.site ul{list-style:none;padding:0;margin:0;display:grid;gap:.35rem}
 footer.site .fbrand{display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem}
 footer.site .fbrand .brand-mark{width:28px;height:28px}
 
+/* City chooser sheet */
+.citysheet{position:fixed;left:50%;top:50%;transform:translate(-50%,-46%);width:min(520px,92vw);background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-3);z-index:71;padding:1.2rem;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+.citysheet.show{opacity:1;pointer-events:auto;transform:translate(-50%,-50%)}
+.citygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.5rem}
+.cityopt{display:flex;flex-direction:column;align-items:flex-start;gap:.1rem;border:1px solid var(--line);background:#fff;border-radius:12px;padding:.6rem .8rem;cursor:pointer;font:inherit;font-weight:600;font-size:.9rem}
+.cityopt small{color:var(--ink-2);font-weight:400;font-size:.72rem}
+.cityopt:hover{border-color:var(--blue)}.cityopt.on{border-color:var(--blue);background:var(--blue-050);color:var(--blue)}
+.altprice{display:block;font-size:.7rem;color:var(--ink-3);font-weight:500;margin-top:1px}
+.deal-row{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,1fr);gap:.9rem;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:.4rem;scrollbar-width:none}
+.deal-row::-webkit-scrollbar{display:none}
+.deal-row>*{scroll-snap-align:start}
+.filterbtn{display:none}@media(max-width:820px){.filterbtn{display:inline-flex}}
+.ship-list{display:grid;gap:.5rem;margin:.5rem 0}
+.ship-item{display:flex;align-items:center;justify-content:space-between;gap:1rem;border:1px solid var(--line);border-radius:10px;padding:.55rem .8rem;font-size:.85rem}
+.ship-item .p{font-weight:600}.ship-item small{color:var(--ink-2)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto}}
 `;

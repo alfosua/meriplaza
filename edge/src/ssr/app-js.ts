@@ -131,5 +131,19 @@ document.addEventListener("click", async (e)=>{
   if(e.target.closest("[data-logout]")){ e.preventDefault(); await postJSON(API+"/auth/logout",{}); location.href="/"; }
 });
 
+// City chooser
+function setCookie(k,v){ document.cookie=k+"="+encodeURIComponent(v)+";path=/;max-age=15552000;samesite=lax"; }
+document.addEventListener("click",(e)=>{
+  if(e.target.closest("[data-open-city]")){ e.preventDefault(); $("#city-sheet")?.classList.add("show"); $("#city-scrim")?.classList.add("show"); }
+  if(e.target.closest("[data-close-city]")||e.target.id==="city-scrim"){ $("#city-sheet")?.classList.remove("show"); $("#city-scrim")?.classList.remove("show"); }
+  const c=e.target.closest("[data-city]");
+  if(c){ setCookie("mp_city",c.dataset.city); location.reload(); }
+});
+// Mobile filters drawer
+document.addEventListener("click",(e)=>{
+  if(e.target.closest("[data-open-filters]")){ $("#filters")?.classList.add("open"); }
+  if(e.target.closest("[data-close-filters]")){ $("#filters")?.classList.remove("open"); }
+});
+
 paint();
 `;

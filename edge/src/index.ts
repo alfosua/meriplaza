@@ -18,6 +18,7 @@ import { homePage, productPage, storePage } from "./ssr/pages.ts";
 import { accountPage, adminPage, storeDashboardPage } from "./ssr/account.ts";
 import { auth } from "./auth/routes.ts";
 import { currentUser } from "./auth/session.ts";
+import { getRate, approxAlt } from "./lib/fx.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -37,23 +38,52 @@ app.get("/assets/app.css", (c) => c.body(APP_CSS, 200, { "content-type": "text/c
 app.get("/assets/app.js", (c) => c.body(APP_JS, 200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=3600" }));
 
 // --- Server-rendered pages (public, defined before the auth gate) ---
+function readCookieVal(h: string | undefined, name: string): string {
+  if (!h) return "";
+  for (const part of h.split(";")) { const [k, ...v] = part.trim().split("="); if (k === name) return decodeURIComponent(v.join("=")); }
+  return "";
+}
+const withAlt = (rate: any) => (p: any) => ({ ...p, alt: approxAlt(p.minPrice ?? p.price, p.currency, rate) });
+
 app.get("/", async (c) => {
-  const q = c.req.query("q") || "";
-  const category = c.req.query("category") || "";
-  const [products, mk] = await Promise.all([listProducts(c.env, { q, category }), marketplaceData(c.env)]);
-  return c.html(homePage({ products, sellers: mk.sellers, categories: mk.categories, q, category }));
+  const q = c.req.query("q") || "", category = c.req.query("category") || "";
+  const store = c.req.query("store") || "", sort = c.req.query("sort") || "";
+  const city = c.req.query("city") || readCookieVal(c.req.header("Cookie"), "mp_city");
+  const browsing = !q && !category && !store;
+  const [products, featured, mk, rate] = await Promise.all([
+    listProducts(c.env, { q, category, store, city, sort }),
+    browsing ? listProducts(c.env, { featured: true, limit: 12 }) : Promise.resolve([]),
+    marketplaceData(c.env), getRate(c.env),
+  ]);
+  const add = withAlt(rate);
+  const cityName = mk.cities.find((x: any) => x.slug === city)?.name || "Caracas";
+  return c.html(homePage({
+    products: products.map(add), featured: featured.map(add),
+    sellers: mk.sellers, categories: mk.categories, cities: mk.cities, promotions: mk.promotions,
+    q, category, store, city, cityName, sort, rate,
+  }));
 });
 app.get("/p/:slug", async (c) => {
   const p = await getProduct(c.env, c.req.param("slug"));
   if (!p) return c.html(notFound(), 404);
-  const mk = await marketplaceData(c.env);
-  return c.html(productPage(p, mk.categories));
+  const [mk, rate] = await Promise.all([marketplaceData(c.env), getRate(c.env)]);
+  // attach dual-currency strings + related products
+  p.offers = p.offers.map((o: any) => ({ ...o, alt: approxAlt(o.price, o.currency, rate) }));
+  const related = (await listProducts(c.env, { category: p.category, limit: 6 })).filter((r: any) => r.slug !== p.slug).slice(0, 5).map(withAlt(rate));
+  return c.html(productPage(p, mk.categories, { rate, related, cities: mk.cities }));
 });
 app.get("/t/:handle", async (c) => {
   const sf = await getStorefront(c.env, c.req.param("handle"));
   if (!sf) return c.html(notFound(), 404);
-  const mk = await marketplaceData(c.env);
-  return c.html(storePage(sf, mk.categories));
+  const [mk, rate] = await Promise.all([marketplaceData(c.env), getRate(c.env)]);
+  sf.products = sf.products.map((o: any) => ({ ...o, alt: approxAlt(o.price, o.currency, rate) }));
+  return c.html(storePage(sf, mk.categories, mk.cities));
+});
+// Persist the chosen delivery city, then return to referrer.
+app.get("/set-city/:slug", (c) => {
+  const slug = c.req.param("slug");
+  const back = c.req.query("back") || "/";
+  return c.body(null, 302, { "Set-Cookie": `mp_city=${encodeURIComponent(slug)}; Path=/; Max-Age=15552000; SameSite=Lax`, "Location": back });
 });
 
 // Account, admin, store dashboard (render login/forbidden when unauthenticated).

@@ -18,10 +18,11 @@ function stars(r: number): string {
 }
 const kindLabel = (k: string) => ({ supermarket: "Supermercado", store: "Tienda", independent: "Emprendedor" }[k] || "Tienda");
 
-interface HeaderOpts { categories?: Array<{ slug: string; name: string; icon: string }>; activeCat?: string; q?: string; city?: string; }
+interface HeaderOpts { categories?: Array<{ slug: string; name: string; icon: string }>; activeCat?: string; q?: string; city?: string; cities?: Array<{ slug: string; name: string; state: string }>; }
 
 function header(o: HeaderOpts = {}): string {
   const cats = o.categories ?? [];
+  const cities = o.cities ?? [];
   const city = o.city || "Caracas";
   return `
   <header class="head">
@@ -41,7 +42,13 @@ function header(o: HeaderOpts = {}): string {
   ${cats.length ? `<nav class="cats"><div class="container">
     <a class="chip ${!o.activeCat ? "active" : ""}" href="/">✨ Todo</a>
     ${cats.map((c) => `<a class="chip ${o.activeCat === c.name ? "active" : ""}" href="/?category=${encodeURIComponent(c.name)}">${esc(c.icon)} ${esc(c.name)}</a>`).join("")}
-  </div></nav>` : ""}`;
+  </div></nav>` : ""}
+  ${cities.length ? `<div class="scrim" id="city-scrim"></div>
+  <div class="citysheet" id="city-sheet" role="dialog" aria-label="Elegir ciudad">
+    <div class="spread" style="margin-bottom:.5rem"><b>¿A dónde enviamos?</b><button class="iconbtn" data-close-city>✕</button></div>
+    <p class="muted" style="margin:0 0 .8rem;font-size:.85rem">Verás productos disponibles en tu ciudad.</p>
+    <div class="citygrid">${cities.map((ct) => `<button class="cityopt ${ct.name === city ? "on" : ""}" data-city="${esc(ct.slug)}">📍 ${esc(ct.name)}<small>${esc(ct.state)}</small></button>`).join("")}</div>
+  </div>` : ""}`;
 }
 
 export interface LayoutOpts {
@@ -105,7 +112,7 @@ function productCard(p: any): string {
       ${p.ratingCount ? `<div class="rating">${stars(p.rating)} <span>(${p.ratingCount})</span></div>` : `<div class="rating muted">Nuevo</div>`}
       ${lowStock ? `<div class="rating" style="color:var(--yellow-600);font-weight:600">¡Solo ${p.bestOffer.stock} disponibles!</div>` : ""}
       <div class="foot">
-        <span class="priceblock"><span class="price">${p.offerCount > 1 ? `<span class="pre">desde</span>` : ""}${esc(p.minPrice ?? "—")} ${esc(p.currency)}</span></span>
+        <span class="priceblock"><span class="price">${p.offerCount > 1 ? `<span class="pre">desde</span>` : ""}${esc(p.minPrice ?? "—")} ${esc(p.currency)}${p.compareAt ? `<span class="was">${esc(p.compareAt)}</span>` : ""}</span>${p.alt ? `<span class="altprice">${esc(p.alt)}</span>` : ""}</span>
         ${add}
       </div>
     </div>
@@ -113,28 +120,86 @@ function productCard(p: any): string {
 }
 
 // ---- home ----
-export function homePage(data: { products: any[]; sellers: any[]; categories: any[]; q?: string; category?: string }): string {
-  const browsing = !data.q && !data.category;
-  const heading = data.q ? `Resultados para “${esc(data.q)}”` : data.category ? esc(data.category) : "Ofertas destacadas";
+interface HomeData { products: any[]; featured?: any[]; sellers: any[]; categories: any[]; cities?: any[]; promotions?: any[]; q?: string; category?: string; store?: string; city?: string; cityName?: string; sort?: string; rate?: any; }
+
+function qsHref(cur: HomeData, change: Record<string, string>): string {
+  const p = new URLSearchParams();
+  const merged: any = { q: cur.q, category: cur.category, store: cur.store, sort: cur.sort, ...change };
+  for (const k of ["q", "category", "store", "sort"]) if (merged[k]) p.set(k, merged[k]);
+  const s = p.toString();
+  return s ? `/?${s}` : "/";
+}
+
+function filtersAside(d: HomeData): string {
+  const storeName = d.store ? (d.sellers.find((s) => s.handle === d.store)?.name || d.store) : "";
+  const sorts = [["", "Más relevantes"], ["price_asc", "Precio: menor"], ["price_desc", "Precio: mayor"], ["rating", "Mejor valorados"]];
+  return `<aside class="filters" id="filters">
+    <div class="spread" style="margin-bottom:.5rem"><b>Filtros</b><button class="iconbtn filterbtn" data-close-filters>✕</button></div>
+    ${(d.q || d.category || d.store) ? `<a class="link" href="/">✕ Limpiar filtros</a>` : ""}
+    <h3>Ordenar</h3>
+    ${sorts.map(([v, label]) => `<a class="${(d.sort || "") === v ? "on" : ""}" href="${qsHref(d, { sort: v })}">${label}</a>`).join("")}
+    <h3>Categorías</h3>
+    <a class="${!d.category ? "on" : ""}" href="${qsHref(d, { category: "" })}">Todas</a>
+    ${d.categories.map((c) => `<a class="${d.category === c.name ? "on" : ""}" href="${qsHref(d, { category: c.name })}">${esc(c.icon)} ${esc(c.name)}</a>`).join("")}
+    <h3>Tiendas</h3>
+    <a class="${!d.store ? "on" : ""}" href="${qsHref(d, { store: "" })}">Todas</a>
+    ${d.sellers.map((s) => `<a class="${d.store === s.handle ? "on" : ""}" href="${qsHref(d, { store: s.handle })}">${esc(s.name)}</a>`).join("")}
+    <h3>Ciudad de entrega</h3>
+    <a data-open-city style="cursor:pointer">📍 ${esc(d.cityName || "Caracas")} · cambiar</a>
+    ${storeName ? `` : ""}
+  </aside>`;
+}
+
+export function homePage(d: HomeData): string {
+  const browsing = !d.q && !d.category && !d.store;
+  const heading = d.q ? `Resultados para “${esc(d.q)}”`
+    : d.category ? esc(d.category)
+    : d.store ? esc(d.sellers.find((s) => s.handle === d.store)?.name || "Tienda")
+    : "Explorar todo";
+  const promos = d.promotions ?? [];
+  const featured = d.featured ?? [];
   const body = `
   <div class="container">
-    ${browsing ? `<section><div class="hero fade-up"><div class="hero-in">
-      <h1>Todo Venezuela, en una sola plaza</h1>
-      <p>Compara precios entre tiendas, paga en bolívares, divisas o cripto, y recibe con entrega local.</p>
-      <a class="btn btn--accent" href="#tiendas">Explorar tiendas</a>
-    </div></div></section>` : ""}
+    ${browsing ? `
+    <section><div class="hero fade-up"><div class="hero-deco"></div><div class="hero-in">
+      <h1>Todo Venezuela, <span class="y">en una sola plaza</span></h1>
+      <p>Compara precios entre tiendas, paga en bolívares, divisas o cripto, y recibe con Yummy, Ridery o Tango.</p>
+      <a class="btn btn--dark" href="#explorar">Explorar productos</a>
+    </div></div></section>
 
-    <section>
-      <div class="section-head"><h2>${heading}</h2><span class="muted">${data.products.length} producto(s)</span></div>
-      <div class="grid stagger">${data.products.length ? data.products.map(productCard).join("") : `<p class="muted">No se encontraron productos.</p>`}</div>
-    </section>
+    ${promos.length ? `<section><div class="promostrip">${promos.map(promoCard).join("")}</div></section>` : ""}
 
-    ${browsing ? `<section id="tiendas">
-      <div class="section-head"><h2>Nuestras tiendas</h2></div>
-      <div class="stores stagger">${data.sellers.map(storeCard).join("")}</div>
+    ${featured.length ? `<section>
+      <div class="section-head"><h2>⚡ Ofertas destacadas</h2><span class="muted">Promocionado</span></div>
+      <div class="deal-row stagger">${featured.map(productCard).join("")}</div>
     </section>` : ""}
+
+    <section id="tiendas">
+      <div class="section-head"><h2>Tiendas populares</h2></div>
+      <div class="stores stagger">${d.sellers.map(storeCard).join("")}</div>
+    </section>` : ""}
+
+    <section id="explorar">
+      <div class="section-head"><h2>${heading}</h2>
+        <span class="row"><button class="btn btn--ghost filterbtn" data-open-filters>⚙ Filtros</button><span class="muted hide-sm">${d.products.length} producto(s)</span></span></div>
+      <div class="with-aside">
+        ${filtersAside(d)}
+        <div class="grid stagger">${d.products.length ? d.products.map(productCard).join("") : `<p class="muted">No se encontraron productos${d.cityName ? ` con entrega en ${esc(d.cityName)}` : ""}.</p>`}</div>
+      </div>
+    </section>
   </div>`;
-  return layout({ title: data.q ? `${data.q} — Meriplaza` : "Meriplaza — El mercado de Venezuela", body, header: { categories: data.categories, activeCat: data.category, q: data.q } });
+  return layout({
+    title: d.q ? `${d.q} — Meriplaza` : d.category ? `${d.category} — Meriplaza` : "Meriplaza — El mercado de Venezuela",
+    body,
+    header: { categories: d.categories, activeCat: d.category, q: d.q, city: d.cityName, cities: d.cities },
+    jsonLd: { "@context": "https://schema.org", "@type": "WebSite", name: "Meriplaza", url: "https://salesfactory-edge.alfosuag.workers.dev/", potentialAction: { "@type": "SearchAction", target: "https://salesfactory-edge.alfosuag.workers.dev/?q={search_term_string}", "query-input": "required name=search_term_string" } },
+  });
+}
+
+function promoCard(pr: any): string {
+  const cls = pr.color === "yellow" ? "promo--yellow" : pr.color === "dark" ? "promo--dark" : "promo--blue";
+  const tag = { holiday: "🎄 Temporada", deal: "🔥 Oferta", bundle: "📦 Combo", event: "🎉 Evento" }[pr.kind as string] || "Promo";
+  return `<a class="promo ${cls}" href="${esc(pr.href)}"><span class="badge" style="background:rgba(255,255,255,.25);align-self:flex-start;margin-bottom:auto">${tag}</span><h3>${esc(pr.title)}</h3><p>${esc(pr.subtitle)}</p></a>`;
 }
 
 function storeCard(s: any): string {
@@ -154,11 +219,14 @@ function storeCard(s: any): string {
 }
 
 // ---- product detail ----
-export function productPage(p: any, categories: any[]): string {
+export function productPage(p: any, categories: any[], opts: { rate?: any; related?: any[]; cities?: any[] } = {}): string {
   const imgs: string[] = p.images && p.images.length ? p.images : [];
-  const main = imgs.length ? `<img src="${esc(imgs[0])}" alt="${esc(p.title)}">` : iconFor(p.category);
+  const main = imgs.length ? `<img src="${esc(imgs[0])}" alt="${esc(p.title)}">` : `<span>${iconFor(p.category)}</span>`;
   const best = p.offers[0];
+  const shipping = best?.shipping || [];
+  const related = opts.related || [];
   const specRows = Object.entries(p.specs || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("");
+  const buyData = best ? `data-add="${esc(best.id)}" data-title="${esc(p.title)}" data-price="${esc(best.price)}" data-currency="${esc(best.currency)}" data-seller="${esc(best.sellerId)}" data-seller-name="${esc(best.sellerName)}"` : "";
   const body = `
   <div class="container">
     <nav class="muted" style="padding:.9rem 0;font-size:.85rem"><a href="/">Inicio</a> › <a href="/?category=${encodeURIComponent(p.category)}">${esc(p.category)}</a> › ${esc(p.title)}</nav>
@@ -170,27 +238,47 @@ export function productPage(p: any, categories: any[]): string {
       <div class="info fade-up">
         ${p.brand ? `<div class="brand-line">${esc(p.brand)}</div>` : ""}
         <h1>${esc(p.title)}</h1>
-        <div class="rating" style="font-size:.95rem">${stars(p.rating)} <span>${p.rating ? p.rating.toFixed(1) : "—"} · ${p.ratingCount} reseña(s)</span></div>
-        ${best ? `<div style="margin:1rem 0"><span class="price" style="font-size:1.8rem">${esc(best.price)} ${esc(best.currency)}</span>
-          ${p.offers.length > 1 ? `<span class="muted"> · mejor precio de ${p.offers.length} tiendas</span>` : ""}</div>` : `<p class="muted">No disponible actualmente.</p>`}
-        <p style="line-height:1.55">${esc(p.description)}</p>
+        <div class="rating" style="font-size:.95rem">${stars(p.rating)} <span>${p.rating ? p.rating.toFixed(1) : "—"} · ${p.ratingCount} reseña(s) · <a href="#resenas" class="link">ver</a></span></div>
+        ${best ? `<div style="margin:1rem 0 .3rem">
+          ${best.discountPct ? `<span class="badge badge--sale" style="vertical-align:middle">-${best.discountPct}%</span> ` : ""}
+          <span class="price" style="font-size:2rem">${esc(best.price)} ${esc(best.currency)}</span>
+          ${best.compareAt ? `<span class="was" style="font-size:1rem">${esc(best.compareAt)} ${esc(best.currency)}</span>` : ""}
+          ${p.offers.length > 1 ? `<span class="muted"> · mejor de ${p.offers.length} tiendas</span>` : ""}
+          ${best.alt ? `<div class="muted" style="font-size:.85rem">${esc(best.alt)} · IVA incluido</div>` : ""}
+        </div>
+        <div class="row" style="gap:.6rem;margin:.8rem 0">
+          <button class="btn btn--primary" style="flex:1" ${best.stock > 0 ? "" : "disabled"} ${buyData}>${best.stock > 0 ? "🛒 Agregar al carrito" : "Agotado"}</button>
+          <button class="btn btn--ghost" aria-label="Favorito">♡</button>
+        </div>
+        ${best.stock > 0 && best.stock <= 5 ? `<div style="color:var(--yellow-600);font-weight:600;font-size:.85rem">¡Solo ${best.stock} disponibles!</div>` : ""}` : `<p class="muted">No disponible actualmente.</p>`}
 
+        <div class="infocards">
+          ${shipping.slice(0, 3).map((s: any) => `<div class="infocard"><b>🛵 ${esc(s.provider)}</b>${esc(s.eta)} · ${esc(s.fee)}</div>`).join("") || `<div class="infocard"><b>🛵 Entrega local</b>Consulta en la tienda</div>`}
+          <div class="infocard"><b>✔ Compra protegida</b>Devolución hasta 7 días</div>
+          ${p.deliveryCities && p.deliveryCities.length ? `<div class="infocard"><b>📍 Entrega en</b>${esc(p.deliveryCities.slice(0, 4).join(", "))}</div>` : ""}
+        </div>
+
+        <p style="line-height:1.6">${esc(p.description)}</p>
+
+        <h2 style="font-size:1.05rem;margin:1.2rem 0 .4rem">Disponible en ${p.offers.length} tienda(s)</h2>
         <div class="offers">
           ${p.offers.map((o: any, i: number) => `<div class="offer ${i === 0 ? "best" : ""}">
             <div class="who"><a href="/t/${esc(o.sellerHandle)}">${esc(o.sellerName)}</a>
-              <small>${o.stock > 0 ? `${o.stock} disponibles` : "Agotado"}${i === 0 ? " · mejor precio" : ""}</small></div>
+              <small>${o.stock > 0 ? `${o.stock} disponibles` : "Agotado"}${i === 0 ? " · mejor precio ⭐" : ""}</small></div>
             <div class="row" style="gap:1rem">
-              <span class="price">${esc(o.price)} ${esc(o.currency)}</span>
+              <span class="price">${esc(o.price)} ${esc(o.currency)}${o.alt ? `<span class="altprice">${esc(o.alt)}</span>` : ""}</span>
               <button class="btn btn--accent" ${o.stock > 0 ? "" : "disabled"} data-add="${esc(o.id)}" data-title="${esc(p.title)}" data-price="${esc(o.price)}" data-currency="${esc(o.currency)}" data-seller="${esc(o.sellerId)}" data-seller-name="${esc(o.sellerName)}">Agregar</button>
             </div>
           </div>`).join("")}
         </div>
 
-        ${specRows ? `<h2 style="font-size:1.05rem;margin:1.2rem 0 .3rem">Especificaciones</h2><table class="specs"><tbody>${specRows}</tbody></table>` : ""}
+        ${specRows ? `<h2 style="font-size:1.05rem;margin:1.4rem 0 .3rem">Especificaciones</h2><table class="specs"><tbody>${specRows}</tbody></table>` : ""}
       </div>
     </div>
 
-    <section class="reviews">
+    ${related.length ? `<section><div class="section-head"><h2>Productos relacionados</h2></div><div class="deal-row stagger">${related.map(productCard).join("")}</div></section>` : ""}
+
+    <section class="reviews" id="resenas">
       <div class="section-head"><h2>Reseñas (${p.ratingCount})</h2></div>
       ${p.reviews.length ? p.reviews.map((r: any) => `<div class="review">
         <div class="rh"><b>${esc(r.author)}</b><span class="stars">${"★".repeat(r.rating)}${"☆".repeat(5 - r.rating)}</span></div>
@@ -209,15 +297,28 @@ export function productPage(p: any, categories: any[]): string {
         <button class="btn btn--primary" style="margin-top:.6rem" type="submit">Publicar reseña</button>
       </form>
     </section>
+
+    ${best ? `<div class="buybar">
+      <div><div class="price">${esc(best.price)} ${esc(best.currency)}</div>${best.alt ? `<div class="altprice">${esc(best.alt)}</div>` : ""}</div>
+      <button class="btn btn--primary" style="flex:1" ${best.stock > 0 ? "" : "disabled"} ${buyData}>${best.stock > 0 ? "Agregar al carrito" : "Agotado"}</button>
+    </div>` : ""}
   </div>`;
-  return layout({ title: `${p.title} — Meriplaza`, body, header: { categories, activeCat: p.category } });
+  const jsonLd = {
+    "@context": "https://schema.org", "@type": "Product", name: p.title, description: p.description,
+    image: imgs, brand: p.brand || undefined, sku: p.id,
+    aggregateRating: p.ratingCount ? { "@type": "AggregateRating", ratingValue: p.rating?.toFixed(1), reviewCount: p.ratingCount } : undefined,
+    offers: best ? { "@type": "AggregateOffer", lowPrice: best.price, priceCurrency: best.currency, offerCount: p.offers.length } : undefined,
+  };
+  return layout({ title: `${p.title} — ${p.brand || "Meriplaza"}`, description: p.description?.slice(0, 155), body,
+    header: { categories, activeCat: p.category, cities: opts.cities }, ogImage: imgs[0], jsonLd });
 }
 
 // ---- store ----
-export function storePage(sf: { seller: any; products: any[] }, categories: any[]): string {
+export function storePage(sf: { seller: any; products: any[] }, categories: any[], cities: any[] = []): string {
   const s = sf.seller, t = s.theme || {};
   const layoutKind = ["grid", "list", "featured"].includes(t.layout) ? t.layout : "grid";
   const initial = (s.name || "?").trim()[0] || "?";
+  const shipping = s.shipping || [];
   const socials = [
     s.socials?.instagram && `<a href="https://instagram.com/${esc(s.socials.instagram)}" style="color:#fff;border-bottom:2px solid rgba(255,255,255,.5)">Instagram</a>`,
     s.socials?.whatsapp && `<a href="https://wa.me/${esc(s.socials.whatsapp)}" style="color:#fff;border-bottom:2px solid rgba(255,255,255,.5)">WhatsApp</a>`,
@@ -227,7 +328,7 @@ export function storePage(sf: { seller: any; products: any[] }, categories: any[
   <div style="--p:${esc(t.primaryColor || "#1b39c9")};--a:${esc(t.accentColor || "#ff5a3c")}">
     <div class="hero" style="margin:0;border-radius:0;background:linear-gradient(135deg,var(--p),var(--a))">
       <div class="container"><div class="row" style="gap:1.25rem;padding:1.5rem 0">
-        <div style="width:76px;height:76px;border-radius:18px;background:rgba(255,255,255,.95);color:var(--p);display:grid;place-items:center;font-weight:900;font-size:2rem;flex:none">${initial}</div>
+        <div style="width:76px;height:76px;border-radius:18px;background:rgba(255,255,255,.95);color:var(--p);display:grid;place-items:center;font-weight:900;font-size:2rem;flex:none;overflow:hidden">${t.logoUrl ? `<img src="${esc(t.logoUrl)}" alt="" style="width:100%;height:100%;object-fit:contain;padding:8px">` : esc(initial)}</div>
         <div>
           <span class="badge" style="background:rgba(255,255,255,.2);color:#fff">${kindLabel(s.kind)}</span>
           <h1 style="margin:.3rem 0;font-size:clamp(1.5rem,4vw,2.2rem)">${esc(s.name)}</h1>
@@ -237,13 +338,16 @@ export function storePage(sf: { seller: any; products: any[] }, categories: any[
       </div></div>
     </div>
     <div class="container">
+      ${shipping.length ? `<section style="padding-bottom:0"><div class="ship-list" style="grid-auto-flow:column;grid-auto-columns:minmax(180px,1fr);display:grid;overflow-x:auto">
+        ${shipping.map((m: any) => `<div class="ship-item"><span class="p">🛵 ${esc(m.provider)}</span><small>${esc(m.eta)} · ${esc(m.fee)}</small></div>`).join("")}
+      </div></section>` : ""}
       <section>
         <div class="section-head"><h2>Productos</h2><span class="muted">${sf.products.length} artículo(s)</span></div>
-        <div class="grid stagger">${sf.products.length ? sf.products.map((o) => storeOfferCard(o, s)).join("") : `<p class="muted">Esta tienda aún no tiene productos.</p>`}</div>
+        <div class="${layoutKind === "list" ? "" : "grid"} stagger">${sf.products.length ? sf.products.map((o) => storeOfferCard(o, s)).join("") : `<p class="muted">Esta tienda aún no tiene productos.</p>`}</div>
       </section>
     </div>
   </div>`;
-  return layout({ title: `${s.name} — Meriplaza`, body, header: { categories } });
+  return layout({ title: `${s.name} — Meriplaza`, description: t.tagline, body, header: { categories, cities } });
 }
 
 function storeOfferCard(o: any, seller: any): string {
@@ -254,7 +358,7 @@ function storeOfferCard(o: any, seller: any): string {
       <a href="/p/${esc(o.slug)}" style="color:inherit"><h3>${esc(o.title)}</h3></a>
       ${o.ratingCount ? `<div class="rating">${stars(o.rating)} <span>(${o.ratingCount})</span></div>` : ""}
       <div class="foot">
-        <span class="price">${esc(o.price)} ${esc(o.currency)}</span>
+        <span class="priceblock"><span class="price">${esc(o.price)} ${esc(o.currency)}</span>${o.alt ? `<span class="altprice">${esc(o.alt)}</span>` : ""}</span>
         <button class="add" ${out ? "disabled" : ""} data-add="${esc(o.offerId)}" data-title="${esc(o.title)}" data-price="${esc(o.price)}" data-currency="${esc(o.currency)}" data-seller="${esc(seller.id)}" data-seller-name="${esc(seller.name)}">+</button>
       </div>
     </div>
