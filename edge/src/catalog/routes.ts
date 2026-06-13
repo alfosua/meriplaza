@@ -19,19 +19,23 @@ const slugify = (s: string) =>
 
 // ---------- marketplace landing ----------
 
-export async function marketplaceData(env: Env): Promise<{ sellers: any[]; categories: any[] }> {
+export async function marketplaceData(env: Env): Promise<{ sellers: any[]; categories: any[]; cities: any[]; promotions: any[] }> {
   const sellers = await env.DB.prepare(
     `SELECT s.doc AS doc,
        (SELECT COUNT(*) FROM offers o WHERE o.seller_id = s.id AND o.active = 1) AS offer_count
      FROM sellers s ORDER BY s.created_at`,
   ).all<{ doc: string; offer_count: number }>();
   const cats = await env.DB.prepare(`SELECT slug, name, icon FROM categories ORDER BY sort, name`).all();
+  const cities = await env.DB.prepare(`SELECT slug, name, state FROM cities ORDER BY sort, name`).all();
+  const promos = await env.DB.prepare(`SELECT id, kind, title, subtitle, href, color FROM promotions WHERE active=1 ORDER BY sort`).all();
   return {
     sellers: (sellers.results ?? []).map((r) => {
       const s = JSON.parse(r.doc);
       return { id: s.id, handle: s.handle, name: s.name, kind: s.kind, theme: s.theme, socials: s.socials, currency: s.currency, productCount: r.offer_count };
     }),
     categories: cats.results ?? [],
+    cities: cities.results ?? [],
+    promotions: promos.results ?? [],
   };
 }
 
@@ -45,13 +49,21 @@ catalog.get("/marketplace", async (c) => {
 
 // ---------- product listing / search ----------
 
-export async function listProducts(env: Env, opts: { q?: string; category?: string; limit?: number } = {}) {
+export async function listProducts(env: Env, opts: { q?: string; category?: string; store?: string; city?: string; sort?: string; featured?: boolean; limit?: number } = {}) {
   const where: string[] = [];
   const binds: unknown[] = [];
   if (opts.category) { where.push("p.category = ?"); binds.push(opts.category); }
   if (opts.q) { where.push("(lower(p.title) LIKE ? OR lower(p.brand) LIKE ? OR lower(p.description) LIKE ?)"); const q = `%${opts.q.toLowerCase()}%`; binds.push(q, q, q); }
+  // Availability filters operate on the product's active offers.
+  if (opts.store) { where.push(`EXISTS (SELECT 1 FROM offers o JOIN sellers s ON s.id=o.seller_id WHERE o.product_id=p.id AND o.active=1 AND s.handle=?)`); binds.push(opts.store); }
+  if (opts.city) { where.push(`EXISTS (SELECT 1 FROM offers o JOIN store_cities sc ON sc.seller_id=o.seller_id WHERE o.product_id=p.id AND o.active=1 AND sc.city_slug=?)`); binds.push(opts.city); }
+  if (opts.featured) where.push(`EXISTS (SELECT 1 FROM offers o WHERE o.product_id=p.id AND o.active=1 AND o.featured=1)`);
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const limit = Math.min(opts.limit ?? 60, 100);
+  const limit = Math.min(opts.limit ?? 60, 120);
+  const order = opts.sort === "price_asc" ? "min_price ASC"
+    : opts.sort === "price_desc" ? "min_price DESC"
+    : opts.sort === "rating" ? "p.rating_avg DESC, p.rating_count DESC"
+    : "p.rating_count DESC, p.title";
   // best = the cheapest active offer; lets a listing card add to cart directly.
   const best = (col: string) =>
     `(SELECT ${col} FROM offers o WHERE o.product_id = p.id AND o.active = 1 ORDER BY CAST(o.price AS REAL), o.id LIMIT 1)`;
@@ -64,23 +76,34 @@ export async function listProducts(env: Env, opts: { q?: string; category?: stri
         ${best("o.id")} AS best_offer_id,
         ${best("o.seller_id")} AS best_seller_id,
         ${best("o.stock")} AS best_stock,
+        ${best("o.compare_at")} AS best_compare,
+        ${best("o.promo")} AS best_promo,
         (SELECT json_extract(s.doc,'$.name') FROM offers o JOIN sellers s ON s.id = o.seller_id
           WHERE o.product_id = p.id AND o.active = 1 ORDER BY CAST(o.price AS REAL), o.id LIMIT 1) AS best_seller_name
      FROM products p ${whereSql}
-     ORDER BY p.rating_count DESC, p.title LIMIT ?`,
+     ORDER BY ${order} LIMIT ?`,
   ).bind(...binds, limit).all<any>();
 
-  return (rows.results ?? []).map((r) => ({
-    id: r.id, slug: r.slug, title: r.title, category: r.category, brand: r.brand,
-    image: firstImage(r.images), rating: r.rating_avg, ratingCount: r.rating_count,
-    minPrice: r.min_price != null ? r.min_price.toFixed(2) : null,
-    currency: r.currency || "VES", offerCount: r.offer_count,
-    bestOffer: r.best_offer_id ? { id: r.best_offer_id, sellerId: r.best_seller_id, sellerName: r.best_seller_name, stock: r.best_stock } : null,
-  }));
+  return (rows.results ?? []).map((r) => {
+    const compare = r.best_compare ? parseFloat(r.best_compare) : 0;
+    const price = r.min_price ?? 0;
+    const discountPct = compare > price && price > 0 ? Math.round(((compare - price) / compare) * 100) : 0;
+    return {
+      id: r.id, slug: r.slug, title: r.title, category: r.category, brand: r.brand,
+      image: firstImage(r.images), rating: r.rating_avg, ratingCount: r.rating_count,
+      minPrice: r.min_price != null ? r.min_price.toFixed(2) : null,
+      compareAt: compare ? compare.toFixed(2) : null, discountPct, promo: r.best_promo || "",
+      currency: r.currency || "VES", offerCount: r.offer_count,
+      bestOffer: r.best_offer_id ? { id: r.best_offer_id, sellerId: r.best_seller_id, sellerName: r.best_seller_name, stock: r.best_stock } : null,
+    };
+  });
 }
 
 catalog.get("/products", async (c) => {
-  const items = await listProducts(c.env, { q: c.req.query("q") ?? "", category: c.req.query("category") ?? "" });
+  const items = await listProducts(c.env, {
+    q: c.req.query("q") ?? "", category: c.req.query("category") ?? "",
+    store: c.req.query("store") ?? "", city: c.req.query("city") ?? "", sort: c.req.query("sort") ?? "",
+  });
   return c.json({ count: items.length, products: items });
 });
 
@@ -90,8 +113,8 @@ export async function getProduct(env: Env, slug: string) {
   const p = await env.DB.prepare(`SELECT * FROM products WHERE slug = ?`).bind(slug).first<any>();
   if (!p) return null;
   const offers = await env.DB.prepare(
-    `SELECT o.id, o.price, o.currency, o.tax_rate, o.stock, o.condition,
-            json_extract(s.doc,'$.name') AS seller_name, s.handle AS seller_handle, s.id AS seller_id
+    `SELECT o.id, o.price, o.currency, o.tax_rate, o.stock, o.condition, o.compare_at, o.promo,
+            s.doc AS seller_doc, s.handle AS seller_handle, s.id AS seller_id
        FROM offers o JOIN sellers s ON s.id = o.seller_id
       WHERE o.product_id = ? AND o.active = 1
       ORDER BY CAST(o.price AS REAL)`,
@@ -99,14 +122,26 @@ export async function getProduct(env: Env, slug: string) {
   const reviews = await env.DB.prepare(
     `SELECT id, author, rating, title, body, created_at FROM reviews WHERE product_id = ? ORDER BY created_at DESC LIMIT 50`,
   ).bind(p.id).all<any>();
+  // delivery cities of the best (first) offer's seller
+  let cities: any[] = [];
+  if (offers.results?.[0]) {
+    const cr = await env.DB.prepare(`SELECT c.name FROM store_cities sc JOIN cities c ON c.slug=sc.city_slug WHERE sc.seller_id=? ORDER BY c.sort`).bind(offers.results[0].seller_id).all<any>();
+    cities = (cr.results ?? []).map((x) => x.name);
+  }
   return {
     id: p.id, slug: p.slug, title: p.title, category: p.category, brand: p.brand,
     description: p.description, images: safeJson(p.images, []), specs: safeJson(p.specs, {}),
-    rating: p.rating_avg, ratingCount: p.rating_count,
-    offers: (offers.results ?? []).map((o) => ({
-      id: o.id, price: o.price, currency: o.currency, taxRate: o.tax_rate, stock: o.stock,
-      condition: o.condition, sellerName: o.seller_name, sellerHandle: o.seller_handle, sellerId: o.seller_id,
-    })),
+    rating: p.rating_avg, ratingCount: p.rating_count, deliveryCities: cities,
+    offers: (offers.results ?? []).map((o) => {
+      const sd = safeJson<any>(o.seller_doc, {});
+      const compare = o.compare_at ? parseFloat(o.compare_at) : 0;
+      return {
+        id: o.id, price: o.price, currency: o.currency, taxRate: o.tax_rate, stock: o.stock,
+        condition: o.condition, compareAt: o.compare_at || null, promo: o.promo || "",
+        discountPct: compare > parseFloat(o.price) ? Math.round((compare - parseFloat(o.price)) / compare * 100) : 0,
+        sellerName: sd.name, sellerHandle: o.seller_handle, sellerId: o.seller_id, shipping: sd.shipping || [],
+      };
+    }),
     reviews: reviews.results ?? [],
   };
 }
@@ -138,15 +173,39 @@ catalog.post("/offers", async (c) => {
   }
   const id = newID("off");
   await c.env.DB.prepare(
-    `INSERT INTO offers (id, product_id, seller_id, price, currency, tax_rate, stock, condition)
-     VALUES (?,?,?,?,?,?,?,?)
+    `INSERT INTO offers (id, product_id, seller_id, price, currency, tax_rate, stock, condition, compare_at, promo, featured)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(product_id, seller_id) DO UPDATE SET
        price=excluded.price, currency=excluded.currency, tax_rate=excluded.tax_rate,
-       stock=excluded.stock, condition=excluded.condition, active=1`,
+       stock=excluded.stock, condition=excluded.condition, compare_at=excluded.compare_at,
+       promo=excluded.promo, featured=excluded.featured, active=1`,
   ).bind(id, b.productId, b.sellerId, String(b.price), b.currency ?? "VES", b.taxRate ?? "16.00",
-    Number.isInteger(b.stock) ? b.stock : 0, b.condition ?? "new").run();
+    Number.isInteger(b.stock) ? b.stock : 0, b.condition ?? "new",
+    b.compareAt ? String(b.compareAt) : "", b.promo ?? "", b.featured ? 1 : 0).run();
   await c.env.CACHE.delete("marketplace");
   return c.json({ ok: true }, 201);
+});
+
+// Create a home promotion banner (admin). body: { kind,title,subtitle,href,color,sort }
+catalog.post("/promotions", async (c) => {
+  const b = await c.req.json().catch(() => null);
+  if (!b || !b.title) return c.json({ error: "validation_failed", message: "title required" }, 422);
+  await c.env.DB.prepare(`INSERT INTO promotions (id, kind, title, subtitle, href, color, sort) VALUES (?,?,?,?,?,?,?)`)
+    .bind(newID("promo"), b.kind ?? "deal", b.title, b.subtitle ?? "", b.href ?? "/", b.color ?? "blue", b.sort ?? 0).run();
+  await c.env.CACHE.delete("marketplace");
+  return c.json({ ok: true }, 201);
+});
+
+// Set a store's delivery cities (admin/store). body: { sellerId, cities: [slug] }
+catalog.post("/sellers/:id/cities", async (c) => {
+  const sellerId = c.req.param("id");
+  const b = await c.req.json().catch(() => null);
+  const cities: string[] = Array.isArray(b?.cities) ? b.cities : [];
+  await c.env.DB.prepare(`DELETE FROM store_cities WHERE seller_id = ?`).bind(sellerId).run();
+  if (cities.length) {
+    await c.env.DB.batch(cities.map((slug) => c.env.DB.prepare(`INSERT OR IGNORE INTO store_cities (seller_id, city_slug) VALUES (?,?)`).bind(sellerId, slug)));
+  }
+  return c.json({ ok: true, cities });
 });
 
 // Add a review and recompute the product's rating aggregate.
@@ -172,7 +231,7 @@ catalog.post("/sellers", async (c) => {
   const seller = {
     id: newID("sel"), handle: String(body.handle), name: String(body.name), kind: body.kind ?? "store",
     taxId: body.taxId ?? "", merchantId: body.merchantId || "", theme: body.theme ?? {}, socials: body.socials ?? {},
-    currency: body.currency || "VES", createdAt: nowISO(),
+    shipping: Array.isArray(body.shipping) ? body.shipping : [], currency: body.currency || "VES", createdAt: nowISO(),
   };
   if (!seller.merchantId) seller.merchantId = `m_${seller.id}`;
   try {
