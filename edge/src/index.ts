@@ -10,8 +10,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./lib/env.ts";
-import { catalog } from "./catalog/routes.ts";
+import { catalog, listProducts, getProduct, getStorefront, marketplaceData } from "./catalog/routes.ts";
 import { payments } from "./payments/routes.ts";
+import { APP_CSS } from "./ssr/theme.ts";
+import { APP_JS } from "./ssr/app-js.ts";
+import { homePage, productPage, storePage } from "./ssr/pages.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -25,7 +28,30 @@ app.use("*", cors({
 }));
 
 app.get("/healthz", (c) => c.json({ status: "ok", products: ["catalog", "payments"] }));
-app.get("/", (c) => c.json({ status: "ok", products: ["catalog", "payments"] }));
+
+// --- Static assets (long-cached) ---
+app.get("/assets/app.css", (c) => c.body(APP_CSS, 200, { "content-type": "text/css; charset=utf-8", "cache-control": "public, max-age=3600" }));
+app.get("/assets/app.js", (c) => c.body(APP_JS, 200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=3600" }));
+
+// --- Server-rendered pages (public, defined before the auth gate) ---
+app.get("/", async (c) => {
+  const q = c.req.query("q") || "";
+  const category = c.req.query("category") || "";
+  const [products, mk] = await Promise.all([listProducts(c.env, { q, category }), marketplaceData(c.env)]);
+  return c.html(homePage({ products, sellers: mk.sellers, categories: mk.categories, q, category }));
+});
+app.get("/p/:slug", async (c) => {
+  const p = await getProduct(c.env, c.req.param("slug"));
+  if (!p) return c.html(notFound(), 404);
+  const mk = await marketplaceData(c.env);
+  return c.html(productPage(p, mk.categories));
+});
+app.get("/t/:handle", async (c) => {
+  const sf = await getStorefront(c.env, c.req.param("handle"));
+  if (!sf) return c.html(notFound(), 404);
+  const mk = await marketplaceData(c.env);
+  return c.html(storePage(sf, mk.categories));
+});
 
 // Auth middleware: constant-ish-time Basic Auth with public storefront reads.
 app.use("*", async (c, next) => {
@@ -46,6 +72,15 @@ app.route("/payments", payments);
 export default app;
 
 // --- auth helpers ---
+
+function notFound(): string {
+  return `<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/assets/app.css">
+  <div class="container" style="text-align:center;padding:5rem 1rem">
+    <h1 style="font-size:3rem;margin:0">404</h1>
+    <p class="muted">No encontramos lo que buscabas.</p>
+    <a class="btn btn--primary" href="/">Volver a Meriplaza</a>
+  </div>`;
+}
 
 function parseCreds(v: string): Map<string, string> {
   const m = new Map<string, string>();

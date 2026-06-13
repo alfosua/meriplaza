@@ -19,24 +19,26 @@ const slugify = (s: string) =>
 
 // ---------- marketplace landing ----------
 
-catalog.get("/marketplace", async (c) => {
-  const cached = await c.env.CACHE.get("marketplace");
-  if (cached) return new Response(cached, { headers: { "content-type": "application/json", "x-cache": "HIT" } });
-
-  const sellers = await c.env.DB.prepare(
+export async function marketplaceData(env: Env): Promise<{ sellers: any[]; categories: any[] }> {
+  const sellers = await env.DB.prepare(
     `SELECT s.doc AS doc,
        (SELECT COUNT(*) FROM offers o WHERE o.seller_id = s.id AND o.active = 1) AS offer_count
      FROM sellers s ORDER BY s.created_at`,
   ).all<{ doc: string; offer_count: number }>();
-  const cats = await c.env.DB.prepare(`SELECT slug, name, icon FROM categories ORDER BY sort, name`).all();
-
-  const payload = json({
+  const cats = await env.DB.prepare(`SELECT slug, name, icon FROM categories ORDER BY sort, name`).all();
+  return {
     sellers: (sellers.results ?? []).map((r) => {
       const s = JSON.parse(r.doc);
       return { id: s.id, handle: s.handle, name: s.name, kind: s.kind, theme: s.theme, socials: s.socials, currency: s.currency, productCount: r.offer_count };
     }),
     categories: cats.results ?? [],
-  });
+  };
+}
+
+catalog.get("/marketplace", async (c) => {
+  const cached = await c.env.CACHE.get("marketplace");
+  if (cached) return new Response(cached, { headers: { "content-type": "application/json", "x-cache": "HIT" } });
+  const payload = json(await marketplaceData(c.env));
   await c.env.CACHE.put("marketplace", payload, { expirationTtl: 60 });
   return new Response(payload, { headers: { "content-type": "application/json", "x-cache": "MISS" } });
 });
@@ -50,12 +52,20 @@ export async function listProducts(env: Env, opts: { q?: string; category?: stri
   if (opts.q) { where.push("(lower(p.title) LIKE ? OR lower(p.brand) LIKE ? OR lower(p.description) LIKE ?)"); const q = `%${opts.q.toLowerCase()}%`; binds.push(q, q, q); }
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const limit = Math.min(opts.limit ?? 60, 100);
+  // best = the cheapest active offer; lets a listing card add to cart directly.
+  const best = (col: string) =>
+    `(SELECT ${col} FROM offers o WHERE o.product_id = p.id AND o.active = 1 ORDER BY CAST(o.price AS REAL), o.id LIMIT 1)`;
 
   const rows = await env.DB.prepare(
     `SELECT p.id, p.slug, p.title, p.category, p.brand, p.images, p.rating_avg, p.rating_count,
         (SELECT MIN(CAST(o.price AS REAL)) FROM offers o WHERE o.product_id = p.id AND o.active = 1) AS min_price,
         (SELECT COUNT(*) FROM offers o WHERE o.product_id = p.id AND o.active = 1) AS offer_count,
-        (SELECT o.currency FROM offers o WHERE o.product_id = p.id AND o.active = 1 ORDER BY CAST(o.price AS REAL) LIMIT 1) AS currency
+        ${best("o.currency")} AS currency,
+        ${best("o.id")} AS best_offer_id,
+        ${best("o.seller_id")} AS best_seller_id,
+        ${best("o.stock")} AS best_stock,
+        (SELECT json_extract(s.doc,'$.name') FROM offers o JOIN sellers s ON s.id = o.seller_id
+          WHERE o.product_id = p.id AND o.active = 1 ORDER BY CAST(o.price AS REAL), o.id LIMIT 1) AS best_seller_name
      FROM products p ${whereSql}
      ORDER BY p.rating_count DESC, p.title LIMIT ?`,
   ).bind(...binds, limit).all<any>();
@@ -65,6 +75,7 @@ export async function listProducts(env: Env, opts: { q?: string; category?: stri
     image: firstImage(r.images), rating: r.rating_avg, ratingCount: r.rating_count,
     minPrice: r.min_price != null ? r.min_price.toFixed(2) : null,
     currency: r.currency || "VES", offerCount: r.offer_count,
+    bestOffer: r.best_offer_id ? { id: r.best_offer_id, sellerId: r.best_seller_id, sellerName: r.best_seller_name, stock: r.best_stock } : null,
   }));
 }
 
