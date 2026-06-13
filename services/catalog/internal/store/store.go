@@ -1,4 +1,6 @@
-// Package store persists catalog sellers, products and orders in memory.
+// Package store persists catalog sellers, products and orders. It defines a
+// Store interface implemented by both an in-memory backend (dev/tests) and a
+// Postgres backend (production).
 package store
 
 import (
@@ -10,6 +12,22 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
+// Store is the persistence contract used by the catalog API.
+type Store interface {
+	SaveSeller(domain.Seller) error
+	Seller(id string) (domain.Seller, error)
+	SellerByHandle(handle string) (domain.Seller, error)
+	SaveProduct(domain.Product) error
+	Product(id string) (domain.Product, error)
+	ProductsBySeller(sellerID string) []domain.Product
+	SaveOrder(domain.Order) error
+	Order(id string) (domain.Order, error)
+	// DecrementStock validates then applies stock reductions atomically so
+	// concurrent checkouts cannot oversell.
+	DecrementStock(lines []domain.OrderLine) error
+}
+
+// Memory is a concurrency-safe in-memory Store.
 type Memory struct {
 	mu       sync.Mutex
 	sellers  map[string]domain.Seller
@@ -75,7 +93,6 @@ func (m *Memory) Product(id string) (domain.Product, error) {
 	return p, nil
 }
 
-// ProductsBySeller returns active and inactive products for a seller.
 func (m *Memory) ProductsBySeller(sellerID string) []domain.Product {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -105,11 +122,9 @@ func (m *Memory) Order(id string) (domain.Order, error) {
 	return o, nil
 }
 
-// DecrementStock reduces stock for an order's lines atomically.
 func (m *Memory) DecrementStock(lines []domain.OrderLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Validate first, then apply, so partial decrements never happen.
 	for _, l := range lines {
 		p, ok := m.products[l.ProductID]
 		if !ok {

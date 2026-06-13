@@ -24,11 +24,11 @@ import (
 )
 
 type Server struct {
-	store *store.Memory
+	store store.Store
 	mux   *http.ServeMux
 }
 
-func New(s *store.Memory) *Server {
+func New(s store.Store) *Server {
 	srv := &Server{store: s, mux: http.NewServeMux()}
 	srv.routes()
 	return srv
