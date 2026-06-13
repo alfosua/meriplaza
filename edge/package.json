@@ -1,0 +1,24 @@
+{
+  "name": "salesfactory-edge",
+  "version": "1.0.0",
+  "description": "SalesFactory ecommerce + payment gateway on Cloudflare Workers (free plan) + D1 + KV",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test 'test/*.test.ts'",
+    "typecheck": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate:local": "wrangler d1 migrations apply salesfactory --local",
+    "migrate:remote": "wrangler d1 migrations apply salesfactory --remote"
+  },
+  "dependencies": {
+    "hono": "^4.12.25"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260613.1",
+    "@types/node": "^25.9.3",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.100.0"
+  }
+}
