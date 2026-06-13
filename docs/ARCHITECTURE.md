@@ -11,10 +11,10 @@ tolerant flows, and cheap to self-host.
 | Product | Module path | Status | Purpose |
 | --- | --- | --- | --- |
 | Fiscal Invoicing | `services/fiscal` | **working** | SENIAT-compatible fiscal invoices; canonical model, server-side reconciliation, thermal render. |
-| Payment Gateway | `services/payments` | in progress | Stripe-like gateway built from scratch: local VE methods (pago móvil, transferencia, divisas), international (US/Panama), and crypto. |
-| Commerce / Catalog | `services/catalog` | planned | "Amazon for Venezuela": products, inventory, orders for supermarkets, stores, and independent sellers. |
-| Storefronts | `services/storefront` | planned | Shopify-like, highly customizable per-seller fronts on shared infra. |
-| Social Commerce | `services/social` | planned | Instagram / WhatsApp / Facebook catalog sync and conversational checkout. |
+| Payment Gateway | `services/payments` | **working** | Stripe-like gateway built from scratch: local VE methods (pago móvil, transferencia, divisas, punto de venta), international (US/Panama), and crypto. |
+| Commerce / Catalog | `services/catalog` | **working** | "Amazon for Venezuela": sellers, products, inventory, and orders linked to payments + fiscal. |
+| Storefronts | `web/components/sf-storefront.js` | **working** | Shopify-like, customizable per-seller front as a vanilla Web Component on shared catalog infra. |
+| Social Commerce | `services/catalog` (channel) + `services/social` | partial | Order `channel` + seller `socials` model WhatsApp/Instagram/Facebook today; a dedicated sync/conversational service is planned. |
 
 ## Shared libraries (`libs/`)
 
@@ -54,7 +54,13 @@ storefront degrades to static HTML on slow or offline connections.
 ```sh
 make test          # all Go tests
 make build         # all binaries
-make run-fiscal    # start the fiscal API on :8081
+make run-fiscal    # fiscal API     :8081
+make run-payments  # payment gateway :8082
+make run-catalog   # commerce API    :8083
 ```
+
+Open `web/demo.html` (served statically) to see the `<sf-storefront>` component
+talking to `catalogd`. The component emits an `sf-checkout` event that a host
+app wires to the payments gateway and then the fiscal service.
 
 See each `services/<name>/README.md` for product-specific details.
