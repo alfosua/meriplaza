@@ -21,14 +21,16 @@
     running edge Worker (wrangler dev defaults to :8799).
   -->
   <button id="back">← Volver al mercado</button>
-  <div id="view">
-    <sf-marketplace id="market" api="http://localhost:8799"></sf-marketplace>
-  </div>
+  <!-- #view is populated by the router below (which picks the right API URL). -->
+  <div id="view"></div>
 
   <script type="module" src="./components/sf-marketplace.js"></script>
   <script type="module" src="./components/sf-storefront.js"></script>
   <script type="module">
-    const API = "http://localhost:8799";
+    // Use the local Worker during dev, the deployed Worker in production.
+    const API = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+      ? "http://localhost:8799"
+      : "https://salesfactory-edge.alfosuag.workers.dev";
     const view = document.getElementById("view");
     const back = document.getElementById("back");
 
