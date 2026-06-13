@@ -1,5 +1,6 @@
 // Server-rendered Meriplaza pages. Full HTML is produced on the edge so the
 // first paint is complete without JS; app.js then progressively enhances.
+import { HEADER_LOGO, MARK_SVG } from "./brand.ts";
 
 const ICON: Record<string, string> = {
   Alimentos: "🍞", Bebidas: "🧃", Salud: "💊", "Cuidado personal": "🧴",
@@ -17,44 +18,68 @@ function stars(r: number): string {
 }
 const kindLabel = (k: string) => ({ supermarket: "Supermercado", store: "Tienda", independent: "Emprendedor" }[k] || "Tienda");
 
-interface HeaderOpts { categories?: Array<{ slug: string; name: string; icon: string }>; activeCat?: string; q?: string; }
+interface HeaderOpts { categories?: Array<{ slug: string; name: string; icon: string }>; activeCat?: string; q?: string; city?: string; }
 
 function header(o: HeaderOpts = {}): string {
   const cats = o.categories ?? [];
+  const city = o.city || "Caracas";
   return `
   <header class="head">
     <div class="container">
-      <a class="logo" href="/">Meri<b>plaza</b></a>
+      <a class="logo" href="/">${HEADER_LOGO}</a>
       <form class="search" action="/" method="get">
-        <input type="search" name="q" value="${esc(o.q ?? "")}" placeholder="Buscar productos en todas las tiendas…" aria-label="Buscar">
         <button type="submit" aria-label="Buscar">🔍</button>
+        <input type="search" name="q" value="${esc(o.q ?? "")}" placeholder="Buscar en todas las tiendas…" aria-label="Buscar">
       </form>
+      <button class="city-pill" data-open-city aria-label="Elegir ciudad">📍 <b>${esc(city)}</b></button>
       <div class="icons">
-        <a class="iconbtn" href="/cuenta" aria-label="Cuenta">👤<span class="hide-sm" style="font-size:.8rem"> Cuenta</span></a>
+        <a class="iconbtn" href="/cuenta" aria-label="Cuenta">👤<span class="hide-sm" style="font-size:.85rem">Cuenta</span></a>
         <button class="iconbtn" data-open-cart aria-label="Carrito">🛒<span class="cart-count" hidden>0</span></button>
       </div>
-      <div class="loc" style="flex-basis:100%">📍 Entregar en <b>Caracas, Venezuela</b></div>
     </div>
   </header>
   ${cats.length ? `<nav class="cats"><div class="container">
-    <a class="chip ${!o.activeCat ? "active" : ""}" href="/">Todo</a>
+    <a class="chip ${!o.activeCat ? "active" : ""}" href="/">✨ Todo</a>
     ${cats.map((c) => `<a class="chip ${o.activeCat === c.name ? "active" : ""}" href="/?category=${encodeURIComponent(c.name)}">${esc(c.icon)} ${esc(c.name)}</a>`).join("")}
   </div></nav>` : ""}`;
 }
 
-export function layout(opts: { title: string; body: string; header?: HeaderOpts; canonical?: string }): string {
+export interface LayoutOpts {
+  title: string; body: string; header?: HeaderOpts;
+  description?: string; canonical?: string; ogImage?: string; jsonLd?: object;
+}
+
+export function layout(opts: LayoutOpts): string {
+  const desc = opts.description || "Meriplaza — el mercado de Venezuela. Compara precios entre tiendas y recibe con entrega local.";
+  const url = opts.canonical || "https://salesfactory-edge.alfosuag.workers.dev/";
+  const favicon = "data:image/svg+xml," + encodeURIComponent(MARK_SVG);
   return `<!doctype html><html lang="es-VE"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#1b39c9">
+<meta name="theme-color" content="#ffffff">
 <title>${esc(opts.title)}</title>
-<meta name="description" content="Meriplaza — el mercado de Venezuela. Productos de muchas tiendas en un solo lugar.">
+<meta name="description" content="${esc(desc)}">
+<link rel="canonical" href="${esc(url)}">
+<link rel="icon" href="${favicon}" type="image/svg+xml">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Meriplaza">
+<meta property="og:title" content="${esc(opts.title)}"><meta property="og:description" content="${esc(desc)}">
+<meta property="og:url" content="${esc(url)}">${opts.ogImage ? `<meta property="og:image" content="${esc(opts.ogImage)}">` : ""}
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/assets/app.css">
+${opts.jsonLd ? `<script type="application/ld+json">${JSON.stringify(opts.jsonLd)}</script>` : ""}
 </head><body>
 ${header(opts.header)}
 <main>${opts.body}</main>
-<footer class="site"><div class="container spread" style="flex-wrap:wrap;gap:1rem">
-  <div><b style="color:#fff;font-size:1.1rem">Meriplaza</b><div class="muted" style="color:#9aa4b2">El mercado de Venezuela</div></div>
-  <div class="row" style="gap:1.5rem"><a href="/">Inicio</a><a href="/cuenta">Mi cuenta</a><a href="/admin">Portal</a></div>
+<footer class="site"><div class="container">
+  <div class="cols">
+    <div>
+      <div class="fbrand"><span class="brand-mark">${MARK_SVG}</span><b style="color:#fff;font-size:1.1rem">Meriplaza</b></div>
+      <p class="muted" style="color:#9aa4b2;margin:.2rem 0 0;max-width:30ch">El mercado de Venezuela. Muchas tiendas, un solo lugar. Paga en bolívares, divisas o cripto.</p>
+    </div>
+    <div><h4>Comprar</h4><ul><li><a href="/">Inicio</a></li><li><a href="/?category=Tecnología">Tecnología</a></li><li><a href="/?category=Alimentos">Alimentos</a></li><li><a href="/?category=Moda">Moda</a></li></ul></div>
+    <div><h4>Cuenta</h4><ul><li><a href="/cuenta">Mi cuenta</a></li><li><a href="/cuenta">Mis pedidos</a></li><li><a href="/tienda/panel">Panel de tienda</a></li></ul></div>
+    <div><h4>SalesFactory</h4><ul><li><a href="/quickpago">QuickPago</a></li><li><a href="/admin">Portal admin</a></li><li><a href="#">Vender en Meriplaza</a></li></ul></div>
+  </div>
+  <div class="muted" style="color:#6b7280;border-top:1px solid #1f2330;margin-top:1.5rem;padding-top:1rem;font-size:.78rem">© 2026 Meriplaza · un producto de SalesFactory · Hecho en Venezuela 🇻🇪</div>
 </div></footer>
 <script src="/assets/app.js" defer></script>
 </body></html>`;
@@ -66,20 +91,21 @@ function productCard(p: any): string {
   const add = p.bestOffer && !out
     ? `<button class="add" data-add="${esc(p.bestOffer.id)}" data-title="${esc(p.title)}" data-price="${esc(p.minPrice)}" data-currency="${esc(p.currency)}" data-seller="${esc(p.bestOffer.sellerId)}" data-seller-name="${esc(p.bestOffer.sellerName)}" aria-label="Agregar">+</button>`
     : `<button class="add" disabled>+</button>`;
+  const lowStock = p.bestOffer && p.bestOffer.stock > 0 && p.bestOffer.stock <= 5;
   return `<article class="card">
     <a href="/p/${esc(p.slug)}" class="thumb">
-      <span>${iconFor(p.category)}</span>
-      ${p.image ? `<img loading="lazy" decoding="async" src="${esc(p.image)}" alt="${esc(p.title)}">` : ""}
-      ${out ? `<span class="badge badge--out">Agotado</span>` : ""}
+      ${p.image ? `<img loading="lazy" decoding="async" src="${esc(p.image)}" alt="${esc(p.title)}">` : `<span class="ph">${iconFor(p.category)}</span>`}
+      ${p.discountPct ? `<span class="badge badge--sale">-${p.discountPct}%</span>` : out ? `<span class="badge badge--out">Agotado</span>` : ""}
     </a>
     <div class="body">
       <a href="/p/${esc(p.slug)}" style="color:inherit">
         <span class="store">${p.offerCount > 1 ? `${p.offerCount} tiendas` : esc(p.bestOffer?.sellerName || "")}</span>
         <h3>${esc(p.title)}</h3>
       </a>
-      ${p.ratingCount ? `<div class="rating">${stars(p.rating)} <span>(${p.ratingCount})</span></div>` : `<div class="rating muted">Sin reseñas</div>`}
+      ${p.ratingCount ? `<div class="rating">${stars(p.rating)} <span>(${p.ratingCount})</span></div>` : `<div class="rating muted">Nuevo</div>`}
+      ${lowStock ? `<div class="rating" style="color:var(--yellow-600);font-weight:600">¡Solo ${p.bestOffer.stock} disponibles!</div>` : ""}
       <div class="foot">
-        <span class="price">${p.offerCount > 1 ? `<small>desde </small>` : ""}${esc(p.minPrice ?? "—")} ${esc(p.currency)}</span>
+        <span class="priceblock"><span class="price">${p.offerCount > 1 ? `<span class="pre">desde</span>` : ""}${esc(p.minPrice ?? "—")} ${esc(p.currency)}</span></span>
         ${add}
       </div>
     </div>
@@ -223,7 +249,7 @@ export function storePage(sf: { seller: any; products: any[] }, categories: any[
 function storeOfferCard(o: any, seller: any): string {
   const out = o.stock <= 0;
   return `<article class="card">
-    <a href="/p/${esc(o.slug)}" class="thumb"><span>${iconFor(o.category)}</span>${o.image ? `<img loading="lazy" src="${esc(o.image)}" alt="${esc(o.title)}">` : ""}${out ? `<span class="badge badge--out">Agotado</span>` : ""}</a>
+    <a href="/p/${esc(o.slug)}" class="thumb">${o.image ? `<img loading="lazy" src="${esc(o.image)}" alt="${esc(o.title)}">` : `<span class="ph">${iconFor(o.category)}</span>`}${out ? `<span class="badge badge--out">Agotado</span>` : ""}</a>
     <div class="body">
       <a href="/p/${esc(o.slug)}" style="color:inherit"><h3>${esc(o.title)}</h3></a>
       ${o.ratingCount ? `<div class="rating">${stars(o.rating)} <span>(${o.ratingCount})</span></div>` : ""}
