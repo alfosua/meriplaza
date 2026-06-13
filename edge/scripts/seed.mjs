@@ -20,11 +20,11 @@ const STORES = [
       socials: { whatsapp: "584140000001", instagram: "superorinoco" },
     },
     products: [
-      { title: "Harina P.A.N. 1kg", price: "45.00", taxRate: "16.00", stock: 120, description: "Harina de maíz precocida" },
-      { title: "Café Fama de América 500g", price: "210.00", taxRate: "16.00", stock: 60, description: "Café molido" },
-      { title: "Leche en polvo 900g", price: "320.00", taxRate: "16.00", stock: 40 },
-      { title: "Pan canilla", price: "18.00", taxRate: "0.00", stock: 200, description: "Recién horneado" },
-      { title: "Aceite de maíz 1L", price: "95.00", taxRate: "16.00", stock: 80 },
+      { title: "Harina P.A.N. 1kg", price: "45.00", taxRate: "16.00", stock: 120, description: "Harina de maíz precocida" , category: "Alimentos" },
+      { title: "Café Fama de América 500g", price: "210.00", taxRate: "16.00", stock: 60, description: "Café molido" , category: "Bebidas" },
+      { title: "Leche en polvo 900g", price: "320.00", taxRate: "16.00", stock: 40 , category: "Alimentos" },
+      { title: "Pan canilla", price: "18.00", taxRate: "0.00", stock: 200, description: "Recién horneado" , category: "Alimentos" },
+      { title: "Aceite de maíz 1L", price: "95.00", taxRate: "16.00", stock: 80 , category: "Alimentos" },
     ],
   },
   {
@@ -34,9 +34,9 @@ const STORES = [
       socials: { instagram: "artesaniasmaria", whatsapp: "584140000002" },
     },
     products: [
-      { title: "Hamaca tejida", price: "45.00", currency: "USD", taxRate: "16.00", stock: 8, description: "Algodón 100%" },
-      { title: "Cesta de mimbre", price: "15.00", currency: "USD", taxRate: "16.00", stock: 20 },
-      { title: "Collar artesanal", price: "12.00", currency: "USD", taxRate: "16.00", stock: 30 },
+      { title: "Hamaca tejida", price: "45.00", currency: "USD", taxRate: "16.00", stock: 8, description: "Algodón 100%" , category: "Artesanía" },
+      { title: "Cesta de mimbre", price: "15.00", currency: "USD", taxRate: "16.00", stock: 20 , category: "Hogar" },
+      { title: "Collar artesanal", price: "12.00", currency: "USD", taxRate: "16.00", stock: 30 , category: "Accesorios" },
     ],
   },
   {
@@ -46,10 +46,10 @@ const STORES = [
       socials: { facebook: "techzoneccs" },
     },
     products: [
-      { title: "Cargador USB-C 65W", price: "22.00", currency: "USD", taxRate: "16.00", stock: 35 },
-      { title: "Audífonos Bluetooth", price: "38.00", currency: "USD", taxRate: "16.00", stock: 15 },
-      { title: "Power Bank 20000mAh", price: "30.00", currency: "USD", taxRate: "16.00", stock: 0, description: "Agotado temporalmente" },
-      { title: "Mouse inalámbrico", price: "14.00", currency: "USD", taxRate: "16.00", stock: 25 },
+      { title: "Cargador USB-C 65W", price: "22.00", currency: "USD", taxRate: "16.00", stock: 35 , category: "Tecnología" },
+      { title: "Audífonos Bluetooth", price: "38.00", currency: "USD", taxRate: "16.00", stock: 15 , category: "Tecnología" },
+      { title: "Power Bank 20000mAh", price: "30.00", currency: "USD", taxRate: "16.00", stock: 0, description: "Agotado temporalmente" , category: "Tecnología" },
+      { title: "Mouse inalámbrico", price: "14.00", currency: "USD", taxRate: "16.00", stock: 25 , category: "Tecnología" },
     ],
   },
 ];

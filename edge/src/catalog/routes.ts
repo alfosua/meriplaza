@@ -35,7 +35,8 @@ catalog.get("/marketplace", async (c) => {
 catalog.get("/products", async (c) => {
   const q = (c.req.query("q") ?? "").trim().toLowerCase();
   const { results } = await c.env.DB.prepare(
-    `SELECT p.doc AS doc, p.stock AS stock, s.handle AS seller_handle, s.name AS seller_name
+    `SELECT p.doc AS doc, p.stock AS stock, s.handle AS seller_handle,
+            json_extract(s.doc, '$.name') AS seller_name
        FROM products p JOIN sellers s ON s.id = p.seller_id
       WHERE p.active = 1`,
   ).all<{ doc: string; stock: number; seller_handle: string; seller_name: string }>();
@@ -125,6 +126,7 @@ catalog.post("/sellers/:id/products", async (c) => {
     sku: body.sku ?? "",
     title: String(body.title),
     description: body.description ?? "",
+    category: body.category ?? "",
     price: String(body.price),
     currency: body.currency || sellerDoc.currency || "VES",
     taxRate: body.taxRate || "16.00",

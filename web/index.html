@@ -2,64 +2,75 @@
 <html lang="es-VE">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SalesFactory — Mercado de Venezuela</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1b39c9">
+  <meta name="description" content="Meriplaza — el mercado de Venezuela. Supermercados, tiendas y emprendedores en una sola plaza.">
+  <title>Meriplaza — El mercado de Venezuela</title>
   <style>
-    html, body { margin: 0; height: 100%; background: #f6f7f9; }
-    #back {
-      display: none; position: sticky; top: 0; z-index: 10;
-      width: 100%; border: 0; padding: .7rem 1rem; text-align: left;
-      background: #10141b; color: #fff; font: 600 .95rem system-ui, sans-serif; cursor: pointer;
-    }
+    :root { color-scheme: light; }
+    html, body { margin: 0; height: 100%; background: #f6f7f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     #view { min-height: 100%; }
+    /* First-paint splash to avoid a flash of unstyled content on slow links. */
+    #boot { display: grid; place-items: center; height: 70vh; color: #1b39c9; font-weight: 800; font-size: 1.4rem; }
   </style>
 </head>
 <body>
   <!--
-    Unified platform shell: shows the marketplace (all stores), and when a store
-    is opened, swaps to that seller's personal <sf-storefront>. Point `api` at a
-    running edge Worker (wrangler dev defaults to :8799).
+    Meriplaza shell: a centralized marketplace (mp-marketplace) plus each store's
+    own custom frontend (mp-storefront), with a shared cart drawer (mp-cart).
+    Hash-routed so deep links and back/forward work; offline-tolerant components.
   -->
-  <button id="back">← Volver al mercado</button>
-  <!-- #view is populated by the router below (which picks the right API URL). -->
-  <div id="view"></div>
+  <div id="view"><div id="boot">Meriplaza…</div></div>
+  <mp-cart id="cart"></mp-cart>
 
-  <script type="module" src="./components/sf-marketplace.js"></script>
-  <script type="module" src="./components/sf-storefront.js"></script>
+  <script type="module" src="./components/mp-marketplace.js"></script>
+  <script type="module" src="./components/mp-storefront.js"></script>
+  <script type="module" src="./components/mp-cart.js"></script>
   <script type="module">
-    // Use the local Worker during dev, the deployed Worker in production.
-    const API = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+    const API = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
       ? "http://localhost:8799"
       : "https://salesfactory-edge.alfosuag.workers.dev";
+
     const view = document.getElementById("view");
-    const back = document.getElementById("back");
+    const cartEl = document.getElementById("cart");
 
-    function showMarket() {
-      back.style.display = "none";
-      view.innerHTML = `<sf-marketplace api="${API}"></sf-marketplace>`;
-    }
-    function showStore(handle) {
-      back.style.display = "block";
-      view.innerHTML = `<sf-storefront handle="${handle}" api="${API}"></sf-storefront>`;
-    }
+    function showMarket() { view.innerHTML = `<mp-marketplace api="${API}"></mp-marketplace>`; }
+    function showStore(handle) { view.innerHTML = `<mp-storefront handle="${handle}" api="${API}"></mp-storefront>`; }
 
-    // Hash is the single source of truth for which view is shown, so deep links
-    // and browser back/forward both work.
     function route() {
       const m = location.hash.match(/#\/tienda\/(.+)$/);
       if (m) showStore(decodeURIComponent(m[1]));
       else showMarket();
+      window.scrollTo(0, 0);
     }
     window.addEventListener("hashchange", route);
 
-    document.addEventListener("sf-open-store", (e) => { location.hash = `#/tienda/${e.detail.handle}`; });
-    document.addEventListener("sf-checkout", (e) => {
-      console.log("checkout requested", e.detail);
-      alert(`Pagar ${e.detail.total} ${e.detail.currency} (${e.detail.items.length} líneas)`);
-    });
-    back.addEventListener("click", () => { location.hash = ""; });
+    document.addEventListener("mp-open-store", (e) => { location.hash = `#/tienda/${e.detail.handle}`; });
+    document.addEventListener("mp-back", () => { location.hash = ""; });
+    document.addEventListener("mp-open-cart", () => cartEl.open());
 
-    route(); // initial render from the current hash
+    // Checkout: one order + payment intent per store group, against the live API.
+    document.addEventListener("mp-checkout", async (e) => {
+      const groups = e.detail.groups;
+      const summary = groups.map((g) => `${g.sellerName}: ${g.subtotal} ${g.currency}`).join("\n");
+      const ok = confirm(`Confirmar pedido:\n\n${summary}\n\n(Demo: crea la orden y un pago pago_móvil en el backend.)`);
+      if (!ok) return;
+      try {
+        for (const g of groups) {
+          const order = await fetch(`${API}/catalog/orders`, {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ sellerId: g.sellerId, channel: "web",
+              items: g.lines.map((l) => ({ productId: l.id, quantity: l.qty })) }),
+          }).then((r) => r.json());
+          console.log("order created", order);
+        }
+        alert("¡Pedido(s) creado(s)! Revisa la consola para el detalle.");
+      } catch (err) {
+        alert("No se pudo completar el checkout: " + err.message);
+      }
+    });
+
+    route();
   </script>
 </body>
 </html>

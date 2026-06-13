@@ -58,17 +58,28 @@ function parseCreds(v: string): Map<string, string> {
   return m;
 }
 
+// Auth model: store/catalog *management* (creating sellers, products, marking
+// orders paid) requires the admin credential. *Customer-facing* actions —
+// browsing, placing an order, and paying — are public, like a Stripe
+// publishable key. Orders/intents are addressed by unguessable ids.
 function isPublic(method: string, path: string): boolean {
   if (path === "/healthz" || path === "/") return true;
-  if (method !== "GET" && method !== "HEAD") return false;
-  // Public browse: the marketplace landing and cross-store product search.
-  if (path === "/catalog/marketplace" || path === "/catalog/products") return true;
-  // GET /catalog/sellers/{handle} — a single storefront (one path segment).
-  const pre = "/catalog/sellers/";
-  if (path.startsWith(pre)) {
-    const rest = path.slice(pre.length).replace(/\/+$/, "");
-    return rest !== "" && !rest.includes("/");
+
+  // Customer write actions (public): place an order, create/confirm/cancel a
+  // payment. NOT mark-paid (that's a back-office/webhook action).
+  if (method === "POST") {
+    if (path === "/catalog/orders") return true;
+    if (path === "/payments/payment_intents") return true;
+    if (/^\/payments\/payment_intents\/[^/]+\/(confirm|cancel)$/.test(path)) return true;
+    return false;
   }
+
+  if (method !== "GET" && method !== "HEAD") return false;
+  // Public reads: marketplace, product search, a storefront, an order, an intent.
+  if (path === "/catalog/marketplace" || path === "/catalog/products") return true;
+  if (/^\/catalog\/sellers\/[^/]+$/.test(path)) return true;        // GET /catalog/sellers/{handle}
+  if (/^\/catalog\/orders\/[^/]+$/.test(path)) return true;          // GET /catalog/orders/{id}
+  if (/^\/payments\/payment_intents\/[^/]+$/.test(path)) return true; // GET /payments/payment_intents/{id}
   return false;
 }
 
