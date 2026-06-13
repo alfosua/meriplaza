@@ -100,5 +100,36 @@ document.addEventListener("submit",async (e)=>{
   toast("¡Gracias por tu reseña!"); setTimeout(()=>location.reload(),900);
 });
 
+// --- auth + management forms ---
+function formData(f){ const o={}; new FormData(f).forEach((v,k)=>o[k]=v); return o; }
+async function postJSON(url, body){ const r=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},credentials:"include",body:JSON.stringify(body)});
+  const t=await r.text().catch(()=>""); let j={}; try{j=JSON.parse(t)}catch{} return {ok:r.ok,status:r.status,data:j}; }
+
+// Login / register tab switch
+document.addEventListener("click",(e)=>{
+  const tab=e.target.closest(".tab"); if(!tab) return;
+  const which=tab.dataset.tab;
+  $$(".tab").forEach(t=>{ const on=t.dataset.tab===which; t.className="tab btn"+(on?"":" btn--ghost"); t.style.background=on?"var(--brand)":""; t.style.color=on?"#fff":""; });
+  const lf=$("#login-form"), rf=$("#register-form"); if(lf&&rf){ lf.hidden=which!=="login"; rf.hidden=which!=="register"; }
+});
+document.addEventListener("change",(e)=>{ if(e.target.name==="isStore"){ const sf=$("[data-store-fields]"); if(sf) sf.hidden=!e.target.checked; }});
+
+document.addEventListener("submit", async (e)=>{
+  const f=e.target;
+  if(f.id==="login-form"){ e.preventDefault(); const r=await postJSON(API+"/auth/login",formData(f));
+    if(r.ok) location.href="/cuenta"; else { const el=f.querySelector("[data-err]"); if(el) el.textContent=r.data.message||"No se pudo iniciar sesión"; } return; }
+  if(f.id==="register-form"){ e.preventDefault(); const d=formData(f); d.role=d.isStore?"store":"customer";
+    const r=await postJSON(API+"/auth/register",d); if(r.ok) location.href="/cuenta"; else { const el=f.querySelector("[data-err]"); if(el) el.textContent=r.data.message||"No se pudo crear la cuenta"; } return; }
+  if(f.id==="admin-new-product"){ e.preventDefault(); const d=formData(f); const body={title:d.title,brand:d.brand,category:d.category,description:d.description,images:d.image?[d.image]:[]};
+    const r=await postJSON(API+"/catalog/products",body); toast(r.ok?"Producto creado":"Error: "+(r.data.message||r.status)); if(r.ok) setTimeout(()=>location.reload(),900); return; }
+  if(f.id==="admin-new-offer"||f.id==="store-new-offer"){ e.preventDefault(); const d=formData(f);
+    const body={productId:d.productId,sellerId:d.sellerId||f.dataset.seller,price:d.price,currency:d.currency,stock:Number(d.stock||0)};
+    const r=await postJSON(API+"/catalog/offers",body); toast(r.ok?"Oferta publicada":"Error: "+(r.data.message||r.status)); if(r.ok) setTimeout(()=>location.reload(),900); return; }
+});
+
+document.addEventListener("click", async (e)=>{
+  if(e.target.closest("[data-logout]")){ e.preventDefault(); await postJSON(API+"/auth/logout",{}); location.href="/"; }
+});
+
 paint();
 `;

@@ -15,6 +15,9 @@ import { payments } from "./payments/routes.ts";
 import { APP_CSS } from "./ssr/theme.ts";
 import { APP_JS } from "./ssr/app-js.ts";
 import { homePage, productPage, storePage } from "./ssr/pages.ts";
+import { accountPage, adminPage, storeDashboardPage } from "./ssr/account.ts";
+import { auth } from "./auth/routes.ts";
+import { currentUser } from "./auth/session.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -53,19 +56,74 @@ app.get("/t/:handle", async (c) => {
   return c.html(storePage(sf, mk.categories));
 });
 
-// Auth middleware: constant-ish-time Basic Auth with public storefront reads.
-app.use("*", async (c, next) => {
-  const creds = parseCreds(c.env.API_USERS ?? "");
-  if (creds.size === 0) return next(); // dev: auth disabled
-  if (isPublic(c.req.method, new URL(c.req.url).pathname)) return next();
-
-  const header = c.req.header("Authorization") ?? "";
-  if (!checkBasic(header, creds)) {
-    return c.json({ error: "unauthorized" }, 401, { "WWW-Authenticate": 'Basic realm="salesfactory"' });
+// Account, admin, store dashboard (render login/forbidden when unauthenticated).
+app.get("/cuenta", async (c) => {
+  const u = await currentUser(c.env, c.req.header("Cookie"));
+  let orders: any[] = [];
+  if (u) {
+    const rows = await c.env.DB.prepare(`SELECT doc FROM orders ORDER BY created_at DESC LIMIT 200`).all<{ doc: string }>();
+    orders = (rows.results ?? []).map((r) => JSON.parse(r.doc)).filter((o) => o.userId === u.id).slice(0, 25);
   }
-  return next();
+  return c.html(accountPage(u, orders));
 });
 
+app.get("/admin", async (c) => {
+  const u = await currentUser(c.env, c.req.header("Cookie"));
+  if (!u || u.role !== "admin") return c.html(adminPage(u, { stores: [], products: [], orders: [], stats: {} }));
+  const [stores, products, orders, counts] = await Promise.all([
+    c.env.DB.prepare(`SELECT id, doc FROM sellers`).all<any>(),
+    c.env.DB.prepare(`SELECT id, title FROM products ORDER BY title`).all<any>(),
+    c.env.DB.prepare(`SELECT doc FROM orders ORDER BY created_at DESC LIMIT 12`).all<{ doc: string }>(),
+    c.env.DB.prepare(`SELECT (SELECT COUNT(*) FROM sellers) s,(SELECT COUNT(*) FROM products) p,(SELECT COUNT(*) FROM offers) o,(SELECT COUNT(*) FROM orders) r`).first<any>(),
+  ]);
+  const orderDocs = (orders.results ?? []).map((r) => JSON.parse(r.doc));
+  const sales: Record<string, number> = {};
+  const allOrders = await c.env.DB.prepare(`SELECT doc FROM orders`).all<{ doc: string }>();
+  for (const r of allOrders.results ?? []) { const o = JSON.parse(r.doc); if (o.status !== "pending") sales[o.currency] = (sales[o.currency] || 0) + parseFloat(o.grandTotal); }
+  const salesText = Object.entries(sales).map(([c2, v]) => `${v.toFixed(0)} ${c2}`).join(" · ") || "—";
+  return c.html(adminPage(u, {
+    stores: (stores.results ?? []).map((r) => ({ id: r.id, ...JSON.parse(r.doc) })),
+    products: products.results ?? [], orders: orderDocs,
+    stats: { stores: counts.s, products: counts.p, offers: counts.o, orders: counts.r, salesText },
+  }));
+});
+
+app.get("/tienda/panel", async (c) => {
+  const u = await currentUser(c.env, c.req.header("Cookie"));
+  if (!u || (u.role !== "store" && u.role !== "admin")) return c.html(storeDashboardPage(u, { seller: null, products: [], offers: [], orders: [], allProducts: [] }));
+  const sellerRow = await c.env.DB.prepare(`SELECT id, doc FROM sellers WHERE id = ?`).bind(u.sellerId).first<any>();
+  const seller = sellerRow ? { id: sellerRow.id, ...JSON.parse(sellerRow.doc) } : null;
+  const offers = seller ? await c.env.DB.prepare(
+    `SELECT o.price, o.currency, o.stock, p.title FROM offers o JOIN products p ON p.id=o.product_id WHERE o.seller_id=? AND o.active=1`).bind(seller.id).all<any>() : { results: [] };
+  const orders = seller ? await c.env.DB.prepare(`SELECT doc FROM orders WHERE seller_id=? ORDER BY created_at DESC LIMIT 50`).bind(seller.id).all<{ doc: string }>() : { results: [] };
+  const allProducts = await c.env.DB.prepare(`SELECT id, title FROM products ORDER BY title`).all<any>();
+  return c.html(storeDashboardPage(u, {
+    seller, products: [], offers: offers.results ?? [],
+    orders: (orders.results ?? []).map((r) => JSON.parse(r.doc)), allProducts: allProducts.results ?? [],
+  }));
+});
+
+// Auth gate for management writes. Order of precedence:
+//  1. Public customer/browse routes pass through.
+//  2. Basic Auth (machine/seed) passes.
+//  3. A logged-in admin passes; a logged-in store passes for catalog writes.
+app.use("*", async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (isPublic(c.req.method, path)) return next();
+
+  const creds = parseCreds(c.env.API_USERS ?? "");
+  if (creds.size === 0) return next(); // dev: auth disabled
+  if (checkBasic(c.req.header("Authorization") ?? "", creds)) return next();
+
+  const user = await currentUser(c.env, c.req.header("Cookie"));
+  if (user?.role === "admin") return next();
+  if (user?.role === "store" && c.req.method === "POST" &&
+      (path === "/catalog/offers" || path === "/catalog/products")) return next();
+
+  return c.json({ error: "unauthorized" }, 401, { "WWW-Authenticate": 'Basic realm="salesfactory"' });
+});
+
+app.route("/auth", auth);
 app.route("/catalog", catalog);
 app.route("/payments", payments);
 
@@ -99,6 +157,9 @@ function parseCreds(v: string): Map<string, string> {
 // publishable key. Orders/intents are addressed by unguessable ids.
 function isPublic(method: string, path: string): boolean {
   if (path === "/healthz" || path === "/") return true;
+
+  // Auth endpoints manage their own credentials.
+  if (path.startsWith("/auth/")) return true;
 
   // Customer write actions (public): place an order, create/confirm/cancel a
   // payment, write a product review. NOT mark-paid (back-office/webhook).
