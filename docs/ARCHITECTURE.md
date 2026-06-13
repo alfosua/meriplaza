@@ -71,14 +71,35 @@ Each service selects its store at startup: `DATABASE_URL` set → Postgres
 with a warning. Public storefront reads (`GET /sellers/{handle}`) stay
 unauthenticated so the Web Component can load.
 
+## Two backends, by deployment target
+
+Go cannot run on Cloudflare's **free** Workers plan (JS/WASM only), so the
+ecommerce + payment-gateway products have a **TypeScript edge implementation**
+in `edge/` that runs on free Workers + D1 (SQLite at the edge) + KV. It is a
+straight port of the Go logic — `libs/money`, `libs/ident`, pricing, and the
+payment processors are re-implemented in TS with the **same test vectors**, so
+both backends agree (e.g. 600.66 → 96.11 VAT, BCV USD conversion, RIF check
+digits). Pick per target:
+
+| | Go (`services/`) | Edge (`edge/`) |
+| --- | --- | --- |
+| Runtime | any Linux / container | Cloudflare Workers (free) |
+| Store | Postgres | D1 + KV |
+| Best for | fiscal, on-prem POS, VPS | global low-latency ecommerce + payments on free tier |
+
+The fiscal service stays Go (it talks to local fiscal printers / SENIAT, near
+the hardware). Ecommerce + payments run on the edge for the free-plan goal.
+
 ## Deployment
 
-- **Single host / VPS:** `deploy/docker-compose.yml` brings up Postgres + the
-  three services + the static frontend. See `deploy/.env.example`.
-- **Cloudflare Containers:** `deploy/cloudflare/` — a Worker routes by path
-  prefix to one container per service, with Postgres hosted externally (Neon)
-  reached over the container's outbound network. See its README. (Workers
-  cannot run Go `net/http`; Containers run the real images.)
+- **Cloudflare Workers free plan (edge):** `edge/` — one Worker mounts
+  `/catalog` + `/payments` on D1 + KV. `npm i && npm run migrate:remote &&
+  npm run deploy`. See `edge/wrangler.jsonc`. This is the target for the
+  ecommerce + payment-gateway free-plan requirement.
+- **Single host / VPS (Go):** `deploy/docker-compose.yml` brings up Postgres +
+  the three Go services + the static frontend. See `deploy/.env.example`.
+- **Cloudflare Containers (Go, Paid plan):** `deploy/cloudflare/` — a Worker
+  routes by path prefix to one container per Go service, Postgres external.
 
 Container images are tiny static binaries on distroless/nonroot — fast to pull
 on low-bandwidth links. Verified locally with podman (build, run, Postgres
