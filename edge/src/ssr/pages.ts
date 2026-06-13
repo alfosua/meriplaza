@@ -88,6 +88,7 @@ ${header(opts.header)}
   </div>
   <div class="muted" style="color:#6b7280;border-top:1px solid #1f2330;margin-top:1.5rem;padding-top:1rem;font-size:.78rem">© 2026 Meriplaza · un producto de SalesFactory · Hecho en Venezuela 🇻🇪</div>
 </div></footer>
+<script type="speculationrules">{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":"/quickpago/api/*"}},{"not":{"selector_matches":"[data-add],[data-open-cart]"}}]},"eagerness":"moderate"}]}</script>
 <script src="/assets/app.js" defer></script>
 </body></html>`;
 }

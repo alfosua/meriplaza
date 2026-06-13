@@ -5,6 +5,13 @@
 // and a warm yellow (#FFC400) as accents. Mobile-first, GPU-cheap, with
 // prefers-reduced-motion support.
 export const APP_CSS = `
+/* Smooth cross-page transitions (Chromium) for a multi-page-app that feels
+   like a single app while staying server-rendered. */
+@view-transition{navigation:auto}
+::view-transition-old(root){animation:vtOut .18s ease both}
+::view-transition-new(root){animation:vtIn .22s ease both}
+@keyframes vtOut{to{opacity:0}}
+@keyframes vtIn{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
 :root{
   --blue:#1257E0;--blue-700:#0c41ad;--blue-050:#eef3ff;
   --yellow:#FFC400;--yellow-600:#e0aa00;
