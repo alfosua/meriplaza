@@ -19,6 +19,7 @@ import { accountPage, adminPage, storeDashboardPage } from "./ssr/account.ts";
 import { auth } from "./auth/routes.ts";
 import { currentUser } from "./auth/session.ts";
 import { getRate, approxAlt } from "./lib/fx.ts";
+import { quickpago } from "./quickpago/routes.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -154,6 +155,7 @@ app.use("*", async (c, next) => {
 });
 
 app.route("/auth", auth);
+app.route("/quickpago", quickpago);
 app.route("/catalog", catalog);
 app.route("/payments", payments);
 
@@ -188,8 +190,9 @@ function parseCreds(v: string): Map<string, string> {
 function isPublic(method: string, path: string): boolean {
   if (path === "/healthz" || path === "/") return true;
 
-  // Auth endpoints manage their own credentials.
+  // Auth endpoints and the QuickPago product manage their own credentials.
   if (path.startsWith("/auth/")) return true;
+  if (path === "/quickpago" || path.startsWith("/quickpago/")) return true;
 
   // Customer write actions (public): place an order, create/confirm/cancel a
   // payment, write a product review. NOT mark-paid (back-office/webhook).

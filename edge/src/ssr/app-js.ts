@@ -145,5 +145,26 @@ document.addEventListener("click",(e)=>{
   if(e.target.closest("[data-close-filters]")){ $("#filters")?.classList.remove("open"); }
 });
 
+// QuickPago portal
+document.addEventListener("click",(e)=>{
+  const tab=e.target.closest("[data-qptab]"); if(tab){ const w=tab.dataset.qptab;
+    $$("[data-qptab]").forEach(t=>{const on=t.dataset.qptab===w;t.className="tab btn"+(on?"":" btn--ghost");t.style.background=on?"var(--qp)":"";t.style.color=on?"#fff":"";});
+    const l=$("#qp-login"),r=$("#qp-register"); if(l&&r){l.hidden=w!=="login";r.hidden=w!=="register";} }
+});
+document.addEventListener("submit", async (e)=>{
+  const f=e.target;
+  if(f.id==="qp-login"){ e.preventDefault(); const r=await postJSON("/quickpago/api/login",formData(f)); if(r.ok) location.href="/quickpago/portal"; else f.querySelector("[data-err]").textContent=r.data.message||"Error"; }
+  if(f.id==="qp-register"){ e.preventDefault(); const r=await postJSON("/quickpago/api/register",formData(f)); if(r.ok) location.href="/quickpago/portal"; else f.querySelector("[data-err]").textContent=r.data.message||"Error"; }
+  if(f.id==="qp-methods"){ e.preventDefault(); const d=formData(f);
+    const body={pagomovil:{bank:d.pm_bank,phone:d.pm_phone,ci:d.pm_ci},transfer:{bank:d.tr_bank,account:d.tr_account,holder:d.tr_holder},crypto:{network:d.cr_network,asset:d.cr_asset,address:d.cr_address}};
+    const r=await postJSON("/quickpago/api/methods",body); toast(r.ok?"Métodos guardados":"Error"); }
+  if(f.id==="qp-charge"){ e.preventDefault(); const r=await postJSON("/quickpago/api/charge",formData(f));
+    if(r.ok){ toast("Cobro creado: "+r.data.reference); setTimeout(()=>location.reload(),900);} else toast("Error"); }
+});
+document.addEventListener("click", async (e)=>{
+  if(e.target.closest("[data-qp-logout]")){ await postJSON("/quickpago/api/logout",{}); location.href="/quickpago"; }
+  const cf=e.target.closest("[data-qp-confirm]"); if(cf){ await postJSON("/quickpago/api/tx/"+cf.dataset.qpConfirm+"/confirm",{}); location.reload(); }
+});
+
 paint();
 `;
