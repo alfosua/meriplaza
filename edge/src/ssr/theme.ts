@@ -33,7 +33,10 @@ img{max-width:100%;display:block}
 .icons{display:flex;align-items:center;gap:.4rem}
 .iconbtn{position:relative;background:rgba(255,255,255,.14);border:0;color:#fff;min-width:40px;height:40px;border-radius:var(--pill);cursor:pointer;font-size:1.05rem;display:inline-flex;align-items:center;gap:.35rem;padding:0 .7rem;text-decoration:none}
 .iconbtn:hover{background:rgba(255,255,255,.24)}
-.cart-count{position:absolute;top:-5px;right:-5px;background:var(--accent);color:#fff;font-size:.65rem;font-weight:800;min-width:18px;height:18px;border-radius:999px;display:grid;place-items:center;padding:0 4px}
+.cart-count{position:absolute;top:-5px;right:-5px;background:var(--accent);color:#fff;font-size:.65rem;font-weight:800;min-width:18px;height:18px;border-radius:999px;display:grid;place-items:center;padding:0 4px;animation:pop .25s ease}
+.cart-count[hidden]{display:none!important}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.hide-sm{display:inline}@media(max-width:560px){.hide-sm{display:none}}
 .loc{font-size:.75rem;opacity:.92;padding:0 0 .55rem}
 .loc b{font-weight:700}
 @media(max-width:560px){.search{order:3;flex-basis:100%}.logo{font-size:1.1rem}}
@@ -71,7 +74,8 @@ section{padding:1.4rem 0}
 .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-1);overflow:hidden;display:flex;flex-direction:column;transition:transform .12s ease,box-shadow .15s ease;content-visibility:auto;contain-intrinsic-size:300px}
 .card:hover{transform:translateY(-3px);box-shadow:var(--shadow-2)}
 .thumb{position:relative;aspect-ratio:1;display:grid;place-items:center;background:linear-gradient(135deg,var(--brand-050),#fff);font-size:clamp(2rem,7vw,3rem);overflow:hidden}
-.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb img{width:100%;height:100%;object-fit:cover;animation:imgIn .45s ease}
+@keyframes imgIn{from{opacity:0}to{opacity:1}}
 .card .body{padding:.7rem .8rem .85rem;display:flex;flex-direction:column;flex:1}
 .card .store{font-size:.72rem;color:var(--ink-2)}
 .card h3{font-size:.85rem;margin:.15rem 0 .35rem;line-height:1.3;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.3em}
