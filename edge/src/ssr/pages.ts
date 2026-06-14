@@ -174,13 +174,14 @@ export function cartPage(cities: Array<{ slug: string; name: string; state: stri
           <label>Correo para recibo<input name="buyerEmail" type="email" autocomplete="email" placeholder="correo@ejemplo.com"></label>
           <div class="frow">
             <label>Ciudad<select name="city">${cityOptions}</select></label>
-            <label>Método de envío<select name="shipmentMethod"><option value="delivery">Delivery local</option><option value="pickup">Retiro en tienda</option><option value="courier">Courier nacional</option></select></label>
+            <label>Método de envío<select name="shipmentMethod"><option value="instant">⚡ Entrega instantánea (30–60 min)</option><option value="delivery">Delivery local</option><option value="pickup">Retiro en tienda</option><option value="courier">Courier nacional</option></select></label>
           </div>
           <label>Dirección<textarea name="address1" rows="3" autocomplete="street-address" placeholder="Calle, edificio, referencia"></textarea></label>
           <label>Notas de entrega<input name="shipmentNotes" placeholder="Horario, punto de referencia, teléfono alterno"></label>
 
           <h2>Pago</h2>
           <label>Método<select name="paymentMethod">
+            <option value="quickpago">⚡ QuickPago (un toque)</option>
             <option value="transferencia">Transferencia nacional</option>
             <option value="pago_movil">Pago móvil</option>
             <option value="divisas_cash">Divisas en efectivo</option>
@@ -284,7 +285,8 @@ function shipmentLabel(s: string): string {
 }
 
 // ---- product card (shared by home + store + search) ----
-function productCard(p: any): string {
+export function productCardsHtml(items: any[]): string { return items.map(productCard).join(""); }
+export function productCard(p: any): string {
   const out = p.bestOffer && p.bestOffer.stock <= 0;
   const add = p.bestOffer && !out
     ? `<button class="add" data-add="${esc(p.bestOffer.id)}" data-title="${esc(p.title)}" data-price="${esc(p.minPrice)}" data-currency="${esc(p.currency)}" data-seller="${esc(p.bestOffer.sellerId)}" data-seller-name="${esc(p.bestOffer.sellerName)}" aria-label="Agregar">+</button>`
@@ -311,14 +313,56 @@ function productCard(p: any): string {
 }
 
 // ---- home ----
-interface HomeData { products: any[]; featured?: any[]; sellers: any[]; categories: any[]; cities?: any[]; promotions?: any[]; q?: string; category?: string; store?: string; city?: string; cityName?: string; sort?: string; rate?: any; }
+interface HomeData { products: any[]; featured?: any[]; sellers: any[]; categories: any[]; cities?: any[]; promotions?: any[]; q?: string; category?: string; store?: string; city?: string; cityName?: string; sort?: string; rate?: any; page?: number; pages?: number; total?: number; rails?: Array<{ title: string; href: string; products: any[] }>; bundles?: any[]; mosaics?: any[]; }
 
 function qsHref(cur: HomeData, change: Record<string, string>): string {
   const p = new URLSearchParams();
-  const merged: any = { q: cur.q, category: cur.category, store: cur.store, sort: cur.sort, ...change };
+  const merged: any = { q: cur.q, category: cur.category, store: cur.store, sort: cur.sort, page: change.page, ...change };
+  // Changing any filter resets to page 1 unless the change explicitly sets page.
   for (const k of ["q", "category", "store", "sort"]) if (merged[k]) p.set(k, merged[k]);
+  if (change.page && change.page !== "1") p.set("page", change.page);
   const s = p.toString();
   return s ? `/?${s}` : "/";
+}
+
+// Infinite-scroll sentinel: app.js observes it and appends the next page's
+// server-rendered cards into [data-grid] until all pages are loaded. Without JS,
+// a fallback "load more" link still pages via the normal route.
+export function infiniteSentinel(endpoint: string, params: string, page: number, pages: number, moreHref?: string): string {
+  if ((pages ?? 1) <= (page ?? 1)) return "";
+  return `<div class="infinite" data-infinite="${esc(endpoint)}" data-params="${esc(params)}" data-page="${page}" data-pages="${pages}">
+    <span class="infinite-spin"><span class="spin"></span> Cargando más productos…</span>
+    ${moreHref ? `<noscript><a class="btn btn--ghost" href="${esc(moreHref)}">Ver más productos</a></noscript>` : ""}
+  </div>`;
+}
+
+// Query string (without page) describing the current home product filter.
+function homeListParams(d: HomeData): string {
+  const p = new URLSearchParams();
+  if (d.q) p.set("q", d.q);
+  if (d.category) p.set("category", d.category);
+  if (d.store) p.set("store", d.store);
+  if (d.sort) p.set("sort", d.sort);
+  if (d.city) p.set("city", d.city);
+  return p.toString();
+}
+
+// With thousands of stores we can't list them all in the sidebar. Show the
+// busiest stores (most offers) plus the currently selected one, with a typeahead
+// box that filters the rendered list client-side (see app.js [data-store-filter]).
+const STORE_FILTER_MAX = 8;
+function storeFilterList(d: HomeData): string {
+  const sorted = [...d.sellers].sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0));
+  let shown = sorted.slice(0, STORE_FILTER_MAX);
+  if (d.store && !shown.some((s) => s.handle === d.store)) {
+    const sel = sorted.find((s) => s.handle === d.store);
+    if (sel) shown = [sel, ...shown.slice(0, STORE_FILTER_MAX - 1)];
+  }
+  const hidden = d.sellers.length - shown.length;
+  const search = d.sellers.length > STORE_FILTER_MAX
+    ? `<input class="store-filter-box" data-store-filter placeholder="Filtrar ${d.sellers.length} tiendas…" aria-label="Filtrar tiendas">`
+    : "";
+  return `${search}<div data-store-list>${shown.map((s) => `<a data-store-name="${esc((s.name || "").toLowerCase())}" class="${d.store === s.handle ? "on" : ""}" href="${qsHref(d, { store: s.handle })}">${esc(s.name)}</a>`).join("")}</div>${hidden > 0 ? `<span class="muted" style="font-size:.78rem;display:block;margin-top:.3rem">+${hidden} tiendas más — usa el buscador o filtra arriba</span>` : ""}`;
 }
 
 function filtersAside(d: HomeData): string {
@@ -334,7 +378,7 @@ function filtersAside(d: HomeData): string {
     ${d.categories.map((c) => `<a class="${d.category === c.name ? "on" : ""}" href="${qsHref(d, { category: c.name })}">${esc(c.icon)} ${esc(c.name)}</a>`).join("")}
     <h3>Tiendas</h3>
     <a class="${!d.store ? "on" : ""}" href="${qsHref(d, { store: "" })}">Todas</a>
-    ${d.sellers.map((s) => `<a class="${d.store === s.handle ? "on" : ""}" href="${qsHref(d, { store: s.handle })}">${esc(s.name)}</a>`).join("")}
+    ${storeFilterList(d)}
     <h3>Ciudad de entrega</h3>
     <a data-open-city style="cursor:pointer">📍 ${esc(d.cityName || "Caracas")} · cambiar</a>
     ${storeName ? `` : ""}
@@ -352,30 +396,37 @@ export function homePage(d: HomeData): string {
   const body = `
   <div class="container">
     ${browsing ? `
-    <section><div class="hero fade-up"><div class="hero-deco"></div><div class="hero-in">
-      <h1>Todo Venezuela, <span class="y">en una sola plaza</span></h1>
-      <p>Compara precios entre tiendas, paga en bolívares, divisas o cripto, y recibe con Yummy, Ridery o Tango.</p>
-      <a class="btn btn--dark" href="#explorar">Explorar productos</a>
-    </div></div></section>
+    ${heroSlides()}
 
     ${promos.length ? `<section><div class="promostrip">${promos.map(promoCard).join("")}</div></section>` : ""}
 
     ${featured.length ? `<section>
       <div class="section-head"><h2>⚡ Ofertas destacadas</h2><span class="muted">Promocionado</span></div>
-      <div class="deal-row stagger">${featured.map(productCard).join("")}</div>
+      ${carousel(featured.map(productCard).join(""), "rail--deals")}
     </section>` : ""}
 
+    ${categoryTiles(d.categories)}
+
+    ${bundlesSection(d.bundles ?? [])}
+
+    ${(d.mosaics ?? []).map(mosaicSection).join("")}
+
     <section id="tiendas">
-      <div class="section-head"><h2>Tiendas populares</h2></div>
-      <div class="stores stagger">${d.sellers.map(storeCard).join("")}</div>
-    </section>` : ""}
+      <div class="section-head"><h2>Tiendas populares</h2>${d.sellers.length > 14 ? `<a class="link" href="/tiendas">Ver todas (${d.sellers.length})</a>` : ""}</div>
+      ${carousel(popularStores(d.sellers, 16).map(storeCardMini).join(""), "rail--stores")}
+    </section>
+
+    ${(d.rails ?? []).map(productRail).join("")}` : ""}
 
     <section id="explorar">
       <div class="section-head"><h2>${heading}</h2>
-        <span class="row"><button class="btn btn--ghost filterbtn" data-open-filters>⚙ Filtros</button><span class="muted hide-sm">${d.products.length} producto(s)</span></span></div>
+        <span class="row"><button class="btn btn--ghost filterbtn" data-open-filters>⚙ Filtros</button><span class="muted hide-sm">${d.total ?? d.products.length} producto(s)</span></span></div>
       <div class="with-aside">
         ${filtersAside(d)}
-        <div class="grid stagger">${d.products.length ? d.products.map(productCard).join("") : `<p class="muted">No se encontraron productos${d.cityName ? ` con entrega en ${esc(d.cityName)}` : ""}.</p>`}</div>
+        <div>
+          <div class="grid stagger" data-grid>${d.products.length ? d.products.map(productCard).join("") : `<p class="muted">No se encontraron productos${d.cityName ? ` con entrega en ${esc(d.cityName)}` : ""}.</p>`}</div>
+          ${infiniteSentinel("/partials/products", homeListParams(d), d.page ?? 1, d.pages ?? 1, qsHref(d, { page: String((d.page ?? 1) + 1) }))}
+        </div>
       </div>
     </section>
   </div>`;
@@ -391,6 +442,138 @@ function promoCard(pr: any): string {
   const cls = pr.color === "yellow" ? "promo--yellow" : pr.color === "dark" ? "promo--dark" : "promo--blue";
   const tag = { holiday: "🎄 Temporada", deal: "🔥 Oferta", bundle: "📦 Combo", event: "🎉 Evento" }[pr.kind as string] || "Promo";
   return `<a class="promo ${cls}" href="${esc(pr.href)}"><span class="badge" style="background:rgba(255,255,255,.25);align-self:flex-start;margin-bottom:auto">${tag}</span><h3>${esc(pr.title)}</h3><p>${esc(pr.subtitle)}</p></a>`;
+}
+
+// The home strip shows only the busiest stores; the rest live on /tiendas.
+export function popularStores(sellers: any[], n = 12): any[] {
+  return [...sellers].sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0)).slice(0, n);
+}
+
+// Full directory of every store, with a client-side name typeahead.
+export function storesPage(sellers: any[], categories: any[] = [], cities: any[] = []): string {
+  const sorted = [...sellers].sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0));
+  const body = `
+  <div class="container">
+    <section class="checkout-head">
+      <div><span class="eyebrow">Directorio</span><h1>Todas las tiendas <span class="muted" style="font-weight:400">(${sellers.length})</span></h1>
+      <p class="muted">Explora cada comercio de Meriplaza.</p></div>
+      <a class="btn btn--ghost" href="/">← Volver</a>
+    </section>
+    <section>
+      <input class="store-filter-box" data-store-filter placeholder="Buscar tienda por nombre…" aria-label="Buscar tienda" style="max-width:420px">
+      <div class="stores stagger" data-store-list style="margin-top:1rem">
+        ${sorted.map((s) => `<div data-store-name="${esc((s.name || "").toLowerCase())}">${storeCard(s)}</div>`).join("")}
+      </div>
+    </section>
+  </div>`;
+  return layout({ title: "Todas las tiendas — Meriplaza", body, header: { categories, cities }, description: "Directorio de todas las tiendas en Meriplaza." });
+}
+
+// Compact store card for the carousel.
+function storeCardMini(s: any): string {
+  const t = s.theme || {};
+  const initial = (s.name || "?").trim()[0] || "?";
+  return `<a class="store-mini" href="/t/${esc(s.handle)}" style="--p:${esc(t.primaryColor || "#1b39c9")};--a:${esc(t.accentColor || "#ff5a3c")}">
+    <span class="store-mini__logo">${t.logoUrl ? `<img loading="lazy" src="${esc(t.logoUrl)}" alt="">` : `<span class="av">${esc(initial)}</span>`}</span>
+    <b>${esc(s.name)}</b>
+    <small>${s.productCount ?? 0} productos</small>
+  </a>`;
+}
+
+// "Shop by category" visual tiles.
+function categoryTiles(categories: any[]): string {
+  if (!categories.length) return "";
+  return `<section>
+    <div class="section-head"><h2>Compra por categoría</h2></div>
+    <div class="cat-tiles">${categories.map((c) => `<a class="cat-tile" href="/?category=${encodeURIComponent(c.name)}"><span class="emoji">${esc(c.icon || "🛍️")}</span>${esc(c.name)}</a>`).join("")}</div>
+  </section>`;
+}
+
+// Bundle / combo carousel.
+function bundleCard(b: any, i: number): string {
+  const variant = ["", "bundle--b", "bundle--c"][i % 3];
+  const imgs = (b.items || []).slice(0, 3).map((it: any) => `<span>${it.image ? `<img loading="lazy" src="${esc(it.image)}" alt="">` : "🛒"}</span>`).join("");
+  const names = (b.items || []).map((it: any) => it.title).join(" + ");
+  return `<a class="bundle ${variant}" href="${esc(b.href || "/")}">
+    <div class="bundle__head">📦 ${esc(b.title)}</div>
+    <div class="bundle__imgs">${imgs}</div>
+    <div class="bundle__body">
+      <div class="bundle__items">${esc(names)}</div>
+      <div class="bundle__foot">
+        <span class="bundle__price">${esc(b.total)} ${esc(b.currency || "VES")}</span>
+        ${b.compareTotal ? `<span class="bundle__was">${esc(b.compareTotal)}</span>` : ""}
+        ${b.savings ? `<span class="bundle__save">-${b.savings}%</span>` : ""}
+      </div>
+    </div>
+  </a>`;
+}
+
+// Wrap a horizontal rail with click/touch scroll buttons (app.js [data-rail-*]).
+function carousel(inner: string, railClass: string): string {
+  return `<div class="carousel">
+    <button class="rail-btn rail-btn--prev" data-rail-prev aria-label="Desplazar a la izquierda">‹</button>
+    <div class="rail ${railClass} stagger" data-rail>${inner}</div>
+    <button class="rail-btn rail-btn--next" data-rail-next aria-label="Desplazar a la derecha">›</button>
+  </div>`;
+}
+
+function bundlesSection(bundles: any[]): string {
+  if (!bundles || !bundles.length) return "";
+  return `<section>
+    <div class="section-head"><h2>📦 Combos y bundles</h2><span class="muted">Arma tu compra y ahorra</span></div>
+    ${carousel(bundles.map(bundleCard).join(""), "rail--bundles")}
+  </section>`;
+}
+
+// A titled product carousel (rail).
+function productRail(r: { title: string; href: string; products: any[] }): string {
+  if (!r.products?.length) return "";
+  return `<section>
+    <div class="section-head"><h2>${esc(r.title)}</h2><a class="link" href="${esc(r.href)}">Ver más →</a></div>
+    ${carousel(r.products.map(productCard).join(""), "rail--deals")}
+  </section>`;
+}
+
+// A playful "bento" mosaic: a colorful headline tile next to a few products.
+function mosaicSection(m: { emoji: string; title: string; sub: string; tone: string; ctaLabel: string; href: string; products: any[] }): string {
+  if (!m.products?.length) return "";
+  return `<section>
+    <div class="mosaic mosaic--${m.tone}">
+      <a class="mosaic__hero" href="${esc(m.href)}">
+        <span class="mosaic__emoji">${m.emoji}</span>
+        <h3>${esc(m.title)}</h3>
+        <p>${esc(m.sub)}</p>
+        <span class="mosaic__cta">${esc(m.ctaLabel)} →</span>
+      </a>
+      ${m.products.slice(0, 4).map(productCard).join("")}
+    </div>
+  </section>`;
+}
+
+// Auto-rotating hero slideshow.
+function heroSlides(): string {
+  const slides = [
+    { tone: "a", eyebrow: "Bienvenido a Meriplaza", h: ['Todo Venezuela, ', '<span class="y">en una sola plaza</span>'], p: "Compara precios entre tiendas, paga en bolívares, divisas o cripto, y recibe con Yummy, Ridery o Tango.", cta: ["Explorar productos", "#explorar"], cta2: ["Ver tiendas", "/tiendas"] },
+    { tone: "b", eyebrow: "🛒 Modo supermercado", h: ['Tu mercado, ', '<span class="y">comparado y al instante</span>'], p: "Elige supermercados cerca de ti, compara precios producto por producto y recibe con entrega instantánea.", cta: ["Ir al supermercado", "/super"], cta2: ["Ofertas", "/?category=Alimentos"] },
+    { tone: "c", eyebrow: "⚡ Paga fácil", h: ['QuickPago: ', '<span class="y">paga con un toque</span>'], p: "Cobra y paga al instante en bolívares, pago móvil, transferencia o cripto. Sin fricción, con factura fiscal.", cta: ["Conocer QuickPago", "/quickpago"], cta2: ["Vender en Meriplaza", "/comercios"] },
+  ];
+  return `<section><div class="hero-show" data-hero>
+    ${slides.map((s, i) => `<div class="hero hero--${s.tone} hero-slide ${i === 0 ? "on" : ""}" data-hero-slide>
+      <div class="hero-deco"></div>
+      <div class="hero-in">
+        <span class="eyebrow">${esc(s.eyebrow)}</span>
+        <h1>${s.h.join("")}</h1>
+        <p>${esc(s.p)}</p>
+        <div class="row" style="gap:.6rem;flex-wrap:wrap">
+          <a class="btn btn--dark" href="${esc(s.cta[1])}">${esc(s.cta[0])}</a>
+          <a class="btn btn--ghost" href="${esc(s.cta2[1])}">${esc(s.cta2[0])}</a>
+        </div>
+      </div>
+    </div>`).join("")}
+    <div class="hero-dots" data-hero-dots>${slides.map((_, i) => `<button class="hero-dot ${i === 0 ? "on" : ""}" data-hero-go="${i}" aria-label="Ir al slide ${i + 1}"></button>`).join("")}</div>
+    <button class="hero-arrow hero-arrow--prev" data-hero-prev aria-label="Anterior">‹</button>
+    <button class="hero-arrow hero-arrow--next" data-hero-next aria-label="Siguiente">›</button>
+  </div></section>`;
 }
 
 function storeCard(s: any): string {

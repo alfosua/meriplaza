@@ -5,7 +5,7 @@ import { Money, divByRate } from "../lib/money.ts";
 
 export type Method =
   | "pago_movil" | "transferencia" | "divisas_cash"
-  | "punto_de_venta" | "card_intl" | "crypto";
+  | "punto_de_venta" | "card_intl" | "crypto" | "quickpago";
 
 export type Status =
   | "requires_confirmation" | "requires_action" | "processing"
@@ -39,7 +39,7 @@ export interface IntentLike {
 
 const KNOWN: Record<string, true> = {
   pago_movil: true, transferencia: true, divisas_cash: true,
-  punto_de_venta: true, card_intl: true, crypto: true,
+  punto_de_venta: true, card_intl: true, crypto: true, quickpago: true,
 };
 
 export function isKnownMethod(m: string): m is Method { return KNOWN[m] === true; }
@@ -93,6 +93,17 @@ export function confirm(method: Method, intent: IntentLike, now: string): Result
       if (tok === "") return { status: "failed", failure: "cardToken required" };
       if (tok.toLowerCase().includes("decline")) return { status: "failed", failure: "card declined" };
       return { status: "succeeded", settlement: { amount: intent.amount, reference: `AUTH-${intent.id}`, settledAt: now } };
+    }
+    case "quickpago": {
+      // QuickPago is SalesFactory's own one-tap wallet/checkout. The shopper is
+      // redirected to approve the cobro; once a QuickPago transaction reference
+      // comes back the intent settles instantly. For the demo flow we accept a
+      // reference (auto-supplied by the storefront) and settle immediately.
+      const ref = s(d.qpReference);
+      if (ref === "") {
+        return { status: "requires_action", nextAction: { type: "quickpago_redirect", data: { message: "Aprueba el cobro en QuickPago", url: `/quickpago/pay/${intent.id}` } } };
+      }
+      return { status: "succeeded", settlement: { amount: intent.amount, reference: ref, networkTxn: `QP-${intent.id}`, settledAt: now } };
     }
     case "crypto": {
       const asset = (s(d.asset) || "USDT").toUpperCase();

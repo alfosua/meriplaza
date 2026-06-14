@@ -10,13 +10,13 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./lib/env.ts";
-import { catalog, listProducts, getProduct, getStorefront, marketplaceData, supermarketData } from "./catalog/routes.ts";
+import { catalog, listProducts, countProducts, getProduct, getStorefront, marketplaceData, supermarketData } from "./catalog/routes.ts";
 import { payments } from "./payments/routes.ts";
 import { APP_CSS } from "./ssr/theme.ts";
 import { APP_JS } from "./ssr/app-js.ts";
-import { cartPage, homePage, orderPage, productPage, sellerLandingPage, storePage } from "./ssr/pages.ts";
+import { cartPage, homePage, orderPage, productPage, sellerLandingPage, storePage, storesPage, productCardsHtml } from "./ssr/pages.ts";
 import { accountPage, adminPage, storeDashboardPage, superAdminPage } from "./ssr/account.ts";
-import { supermarketPage } from "./ssr/supermarket.ts";
+import { supermarketPage, compareCardsHtml } from "./ssr/supermarket.ts";
 import { auth } from "./auth/routes.ts";
 import { currentUser } from "./auth/session.ts";
 import { getRate, approxAlt } from "./lib/fx.ts";
@@ -47,24 +47,62 @@ function readCookieVal(h: string | undefined, name: string): string {
 }
 const withAlt = (rate: any) => (p: any) => ({ ...p, alt: approxAlt(p.minPrice ?? p.price, p.currency, rate) });
 
+const PAGE_SIZE = 48;
 app.get("/", async (c) => {
   const q = c.req.query("q") || "", category = c.req.query("category") || "";
   const store = c.req.query("store") || "", sort = c.req.query("sort") || "";
   const city = c.req.query("city") || readCookieVal(c.req.header("Cookie"), "mp_city");
+  const page = Math.max(1, parseInt(c.req.query("page") || "1", 10) || 1);
   const browsing = !q && !category && !store;
-  const [products, featured, mk, rate] = await Promise.all([
-    listProducts(c.env, { q, category, store, city, sort }),
-    browsing ? listProducts(c.env, { featured: true, limit: 12 }) : Promise.resolve([]),
+  const home1 = browsing && page === 1; // show promo material only on the landing
+  const filter = { q, category, store, city, sort };
+  const railList = (cat: string, s: string) => home1 ? listProducts(c.env, { category: cat, city, sort: s, limit: 12 }) : Promise.resolve([]);
+  const [products, total, featured, alimentos, tecnologia, hogar, bebidas, mk, rate] = await Promise.all([
+    listProducts(c.env, { ...filter, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
+    countProducts(c.env, filter),
+    home1 ? listProducts(c.env, { featured: true, limit: 12 }) : Promise.resolve([]),
+    railList("Alimentos", "price_asc"), railList("Tecnología", "rating"), railList("Hogar", ""), railList("Bebidas", ""),
     marketplaceData(c.env), getRate(c.env),
   ]);
   const add = withAlt(rate);
   const cityName = mk.cities.find((x: any) => x.slug === city)?.name || "Caracas";
+  const rails = home1 ? [
+    { title: "🍞 Mercado: lo esencial", href: "/?category=Alimentos", products: alimentos.map(add) },
+    { title: "📱 Tecnología destacada", href: "/?category=Tecnolog%C3%ADa", products: tecnologia.map(add) },
+    { title: "🏠 Para tu hogar", href: "/?category=Hogar", products: hogar.map(add) },
+  ].filter((r) => r.products.length) : [];
+  const bundles = home1 ? [
+    makeBundle("Combo Despensa Básica", alimentos, "/?category=Alimentos"),
+    makeBundle("Combo Refresca tu Día", bebidas, "/?category=Bebidas"),
+    makeBundle("Combo Hogar Limpio", hogar, "/?category=Hogar"),
+  ].filter(Boolean) : [];
+  // Playful "bento" mosaics — a fun headline tile next to a few real products.
+  const mosaics = home1 ? [
+    { emoji: "🫓", title: "Para la arepa perfecta", sub: "Harina, queso y todo lo que falta", tone: "warm", ctaLabel: "Llenar la despensa", href: "/?category=Alimentos", products: alimentos.slice(2, 6).map(add) },
+    { emoji: "🌙", title: "Antojos de medianoche", sub: "Snacks y bebidas para cualquier hora", tone: "grape", ctaLabel: "Ver bebidas", href: "/?category=Bebidas", products: bebidas.slice(0, 4).map(add) },
+    { emoji: "🎮", title: "Tech que vas a amar", sub: "Gadgets y accesorios al mejor precio", tone: "cool", ctaLabel: "Explorar tecnología", href: "/?category=Tecnolog%C3%ADa", products: tecnologia.slice(0, 4).map(add) },
+  ].filter((m) => m.products.length >= 4) : [];
   return c.html(homePage({
     products: products.map(add), featured: featured.map(add),
     sellers: mk.sellers, categories: mk.categories, cities: mk.cities, promotions: mk.promotions,
-    q, category, store, city, cityName, sort, rate,
+    q, category, store, city, cityName, sort, rate, rails, bundles, mosaics,
+    page, pages: Math.ceil(total / PAGE_SIZE), total,
   }));
 });
+
+// Build a 3-item "combo" bundle card from a product list, with a small bundle
+// discount vs. buying separately.
+function makeBundle(title: string, products: any[], href: string): any | null {
+  const items = (products || []).slice(0, 3).filter((p) => p.minPrice != null);
+  if (items.length < 3) return null;
+  const sum = items.reduce((s, p) => s + parseFloat(p.minPrice), 0);
+  const total = sum * 0.9; // 10% combo discount
+  return {
+    title, href, currency: items[0].currency || "VES",
+    items: items.map((p) => ({ title: p.title, image: p.image, price: p.minPrice })),
+    total: total.toFixed(2), compareTotal: sum.toFixed(2), savings: 10,
+  };
+}
 app.get("/p/:slug", async (c) => {
   const p = await getProduct(c.env, c.req.param("slug"));
   if (!p) return c.html(notFound(), 404);
@@ -73,6 +111,10 @@ app.get("/p/:slug", async (c) => {
   p.offers = p.offers.map((o: any) => ({ ...o, alt: approxAlt(o.price, o.currency, rate) }));
   const related = (await listProducts(c.env, { category: p.category, limit: 6 })).filter((r: any) => r.slug !== p.slug).slice(0, 5).map(withAlt(rate));
   return c.html(productPage(p, mk.categories, { rate, related, cities: mk.cities }));
+});
+app.get("/tiendas", async (c) => {
+  const mk = await marketplaceData(c.env);
+  return c.html(storesPage(mk.sellers, mk.categories, mk.cities));
 });
 app.get("/t/:handle", async (c) => {
   const sf = await getStorefront(c.env, c.req.param("handle"));
@@ -133,16 +175,56 @@ app.get("/super", async (c) => {
   const cityCookie = readCookieVal(c.req.header("Cookie"), "mp_city");
   const stores = (c.req.query("stores") || "").split(",").map((s) => s.trim()).filter(Boolean);
   const q = c.req.query("q") || "", category = c.req.query("category") || "";
+  const sort = c.req.query("sort") || "";
+  const certified = c.req.query("certified") === "1", instant = c.req.query("instant") === "1", inStock = c.req.query("instock") === "1";
+  const superPageSize = 60;
+  const page = Math.max(1, parseInt(c.req.query("page") || "1", 10) || 1);
   const [mk, rate] = await Promise.all([marketplaceData(c.env), getRate(c.env)]);
   const cityName = home.city || mk.cities.find((x: any) => x.slug === cityCookie)?.name || "";
   const data = await supermarketData(c.env, {
     lat: home.lat, lng: home.lng, cityName, stores, q, category,
+    sort, certified, instant, inStock,
+    limit: superPageSize, offset: (page - 1) * superPageSize,
   });
   return c.html(supermarketPage({
     ...data, q, category, selectedStores: stores, rate,
+    sort, certified, instant, inStock,
     cities: mk.cities, cityName: cityName || data.home.cityName || "Caracas",
     home, mapsKey: c.env.GOOGLE_MAPS_API_KEY || "",
+    page, pages: Math.ceil((data.total ?? 0) / superPageSize), total: data.total ?? 0, totalStores: data.totalStores ?? data.stores.length,
   }));
+});
+
+// Infinite-scroll partials: return just the next page of product-card HTML so
+// app.js can append it (progressive loading instead of pagination).
+app.get("/partials/products", async (c) => {
+  const page = Math.max(1, parseInt(c.req.query("page") || "1", 10) || 1);
+  const city = c.req.query("city") || readCookieVal(c.req.header("Cookie"), "mp_city");
+  const [items, rate] = await Promise.all([
+    listProducts(c.env, {
+      q: c.req.query("q") || "", category: c.req.query("category") || "",
+      store: c.req.query("store") || "", city, sort: c.req.query("sort") || "",
+      limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE,
+    }),
+    getRate(c.env),
+  ]);
+  return c.html(productCardsHtml(items.map(withAlt(rate))));
+});
+
+app.get("/partials/supermarket", async (c) => {
+  const home = readHome(c.req.header("Cookie"));
+  const cityCookie = readCookieVal(c.req.header("Cookie"), "mp_city");
+  const stores = (c.req.query("stores") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const page = Math.max(1, parseInt(c.req.query("page") || "1", 10) || 1);
+  const size = 60;
+  const data = await supermarketData(c.env, {
+    lat: home.lat, lng: home.lng, cityName: home.city || cityCookie || "",
+    stores, q: c.req.query("q") || "", category: c.req.query("category") || "",
+    sort: c.req.query("sort") || "", certified: c.req.query("certified") === "1",
+    instant: c.req.query("instant") === "1", inStock: c.req.query("instock") === "1",
+    limit: size, offset: (page - 1) * size,
+  });
+  return c.html(compareCardsHtml(data.products));
 });
 
 // Superuser content-management portal for well-known products.

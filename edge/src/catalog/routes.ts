@@ -57,8 +57,16 @@ const CARACAS = { lat: 10.4806, lng: -66.9036 };
 
 export interface SupermarketOpts {
   lat?: number; lng?: number; cityName?: string;
-  stores?: string[]; q?: string; category?: string; limit?: number;
+  stores?: string[]; q?: string; category?: string; limit?: number; offset?: number;
+  sort?: string; certified?: boolean; instant?: boolean; inStock?: boolean;
 }
+
+// How many of the nearest stores feed the price comparison when the shopper
+// hasn't hand-picked any. Bounds the offers IN(...) clause so the query stays
+// fast and within SQLite's bound-variable limit even with thousands of stores.
+const NEARBY_COMPARE = 12;
+// How many store chips to render in the picker (closest first).
+const MAX_STORE_CHIPS = 60;
 
 /**
  * Supermarket view: rank stores by how close their delivery coverage is to the
@@ -77,8 +85,11 @@ export async function supermarketData(env: Env, opts: SupermarketOpts = {}) {
   }
   if (lat == null || lng == null) { lat = CARACAS.lat; lng = CARACAS.lng; }
 
-  // Rank every store by the distance to its nearest covered city.
-  const sellerRows = await env.DB.prepare(`SELECT id, doc FROM sellers`).all<any>();
+  // Rank every store by distance. A store with its own geo point (lat/lng set)
+  // is ranked from that exact branch location; otherwise we fall back to the
+  // nearest covered-city centroid. This lets thousands of branches in one city
+  // spread out instead of collapsing onto the city center.
+  const sellerRows = await env.DB.prepare(`SELECT id, doc, lat, lng FROM sellers`).all<any>();
   const cov = await env.DB.prepare(
     `SELECT sc.seller_id AS seller_id, c.name AS city, c.lat AS lat, c.lng AS lng
        FROM store_cities sc JOIN cities c ON c.slug = sc.city_slug WHERE c.lat <> 0`,
@@ -89,36 +100,93 @@ export async function supermarketData(env: Env, opts: SupermarketOpts = {}) {
     coverage.get(r.seller_id)!.push(r);
   }
   const distById = new Map<string, number>();
-  const stores = (sellerRows.results ?? []).map((r) => {
+  const ranked = (sellerRows.results ?? []).map((r) => {
     const doc = safeJson<any>(r.doc, {});
     let dist = Infinity, nearest: string | null = null;
-    for (const c of coverage.get(r.id) ?? []) {
-      const d = distanceKm(lat!, lng!, c.lat, c.lng);
-      if (d < dist) { dist = d; nearest = c.city; }
+    if (r.lat && r.lng) {
+      dist = distanceKm(lat!, lng!, r.lat, r.lng);
+      // Label with the covered city closest to the branch, for context.
+      let cityDist = Infinity;
+      for (const c of coverage.get(r.id) ?? []) {
+        const d = distanceKm(r.lat, r.lng, c.lat, c.lng);
+        if (d < cityDist) { cityDist = d; nearest = c.city; }
+      }
+    } else {
+      for (const c of coverage.get(r.id) ?? []) {
+        const d = distanceKm(lat!, lng!, c.lat, c.lng);
+        if (d < dist) { dist = d; nearest = c.city; }
+      }
     }
     if (Number.isFinite(dist)) distById.set(r.id, Math.round(dist));
     return {
       id: r.id, handle: doc.handle, name: doc.name, kind: doc.kind,
       currency: doc.currency || "VES", theme: doc.theme || {},
+      certified: !!doc.certified, instant: !!doc.instant,
       nearestCity: nearest, distanceKm: Number.isFinite(dist) ? Math.round(dist) : null,
     };
   }).filter((s) => s.distanceKm != null).sort((a, b) => (a.distanceKm! - b.distanceKm!));
 
-  // Which sellers' offers feed the product comparison.
+  const totalStores = ranked.length;
+  // Store-level filters (apply before picking chips / comparison stores).
+  let pool = ranked;
+  if (opts.certified) pool = pool.filter((s) => s.certified);
+  if (opts.instant) pool = pool.filter((s) => s.instant);
+  // Only the closest stores get rendered as chips (the UI can't show thousands).
+  const stores = pool.slice(0, MAX_STORE_CHIPS);
+
+  // Which sellers' offers feed the product comparison. With no hand-picked
+  // stores, compare across the nearest few (after filters) so it stays bounded.
   const selectedHandles = (opts.stores ?? []).filter(Boolean);
   const sellersForProducts = selectedHandles.length
-    ? stores.filter((s) => selectedHandles.includes(s.handle))
-    : stores;
+    ? pool.filter((s) => selectedHandles.includes(s.handle))
+    : pool.slice(0, NEARBY_COMPARE);
   const sellerIds = sellersForProducts.map((s) => s.id);
-  if (!sellerIds.length) return { home: { lat, lng, cityName: opts.cityName || "" }, stores, products: [], categories: GROCERY_CATEGORIES };
+  if (!sellerIds.length) return { home: { lat, lng, cityName: opts.cityName || "" }, stores, totalStores, products: [], total: 0, categories: GROCERY_CATEGORIES };
 
   const cats = opts.category && GROCERY_CATEGORIES.includes(opts.category) ? [opts.category] : GROCERY_CATEGORIES;
   const catPh = cats.map(() => "?").join(",");
   const selPh = sellerIds.map(() => "?").join(",");
-  const binds: unknown[] = [...cats, ...sellerIds];
   let qClause = "";
-  if (opts.q) { qClause = " AND (lower(p.title) LIKE ? OR lower(p.brand) LIKE ?)"; const t = `%${opts.q.toLowerCase()}%`; binds.push(t, t); }
+  const qBinds: unknown[] = [];
+  if (opts.q) { qClause = " AND (lower(p.title) LIKE ? OR lower(p.brand) LIKE ?)"; const t = `%${opts.q.toLowerCase()}%`; qBinds.push(t, t); }
 
+  // Step 1: page the distinct grocery products that have an offer in the chosen
+  // stores (ordered by title), plus a total count for pagination. This bounds
+  // how many products we materialize regardless of catalog size.
+  const limit = Math.min(opts.limit ?? 60, 120);
+  const offset = Math.max(0, opts.offset ?? 0);
+  const stockCond = opts.inStock ? " AND o.stock > 0" : "";
+  const baseWhere = `WHERE p.category IN (${catPh})${qClause} AND EXISTS (
+      SELECT 1 FROM offers o WHERE o.product_id = p.id AND o.active = 1 AND o.seller_id IN (${selPh})${stockCond})`;
+  const filterBinds = [...cats, ...qBinds, ...sellerIds];
+  const totalRow = await env.DB.prepare(`SELECT COUNT(*) AS n FROM products p ${baseWhere}`).bind(...filterBinds).first<{ n: number }>();
+  const total = totalRow?.n ?? 0;
+
+  // Sort across the whole filtered set (not just the page). price/savings need
+  // a min/max over the chosen stores' offers, computed as SELECT subqueries —
+  // their binds precede the WHERE binds since they appear earlier in the SQL.
+  const sort = opts.sort || "";
+  const minExpr = `(SELECT MIN(CAST(o.price AS REAL)) FROM offers o WHERE o.product_id=p.id AND o.active=1 AND o.seller_id IN (${selPh})${stockCond})`;
+  const maxExpr = `(SELECT MAX(CAST(o.price AS REAL)) FROM offers o WHERE o.product_id=p.id AND o.active=1 AND o.seller_id IN (${selPh})${stockCond})`;
+  let selExtra = "", orderSql = "p.title";
+  const orderBinds: unknown[] = [];
+  if (sort === "price_asc" || sort === "price_desc") {
+    selExtra = `, ${minExpr} AS minp`; orderBinds.push(...sellerIds);
+    orderSql = sort === "price_asc" ? "minp ASC" : "minp DESC";
+  } else if (sort === "savings") {
+    selExtra = `, ${minExpr} AS minp, ${maxExpr} AS maxp`; orderBinds.push(...sellerIds, ...sellerIds);
+    orderSql = "(maxp - minp) DESC";
+  } else if (sort === "rating") {
+    orderSql = "p.rating_avg DESC, p.rating_count DESC";
+  }
+  const pageIds = await env.DB.prepare(
+    `SELECT p.id${selExtra} FROM products p ${baseWhere} ORDER BY ${orderSql} LIMIT ? OFFSET ?`,
+  ).bind(...orderBinds, ...filterBinds, limit, offset).all<{ id: string }>();
+  const ids = (pageIds.results ?? []).map((r) => r.id);
+  if (!ids.length) return { home: { lat, lng, cityName: opts.cityName || "" }, stores, totalStores, products: [], total, categories: GROCERY_CATEGORIES };
+
+  // Step 2: every chosen-store offer for just this page of products.
+  const idPh = ids.map(() => "?").join(",");
   const rows = await env.DB.prepare(
     `SELECT p.id, p.slug, p.title, p.category, p.brand, p.images, p.rating_avg, p.rating_count,
             o.id AS offer_id, o.price, o.currency, o.stock, o.compare_at,
@@ -126,9 +194,9 @@ export async function supermarketData(env: Env, opts: SupermarketOpts = {}) {
        FROM offers o
        JOIN products p ON p.id = o.product_id
        JOIN sellers s ON s.id = o.seller_id
-      WHERE o.active = 1 AND p.category IN (${catPh}) AND o.seller_id IN (${selPh})${qClause}
-      ORDER BY p.title, CAST(o.price AS REAL)`,
-  ).bind(...binds).all<any>();
+      WHERE o.active = 1 AND p.id IN (${idPh}) AND o.seller_id IN (${selPh})${stockCond}
+      ORDER BY CAST(o.price AS REAL)`,
+  ).bind(...ids, ...sellerIds).all<any>();
 
   const products = new Map<string, any>();
   for (const r of rows.results ?? []) {
@@ -147,7 +215,8 @@ export async function supermarketData(env: Env, opts: SupermarketOpts = {}) {
       distanceKm: distById.get(r.seller_id) ?? null,
     });
   }
-  const list = [...products.values()].map((p) => {
+  // Preserve the sorted page order from step 1.
+  const list = ids.map((id) => products.get(id)).filter(Boolean).map((p) => {
     const prices = p.offers.map((o: any) => parseFloat(o.price)).filter((n: number) => Number.isFinite(n));
     const min = Math.min(...prices), max = Math.max(...prices);
     const best = p.offers.find((o: any) => parseFloat(o.price) === min) || p.offers[0];
@@ -160,24 +229,33 @@ export async function supermarketData(env: Env, opts: SupermarketOpts = {}) {
       storeCount: p.offers.length,
       savingsPct: max > min && max > 0 ? Math.round(((max - min) / max) * 100) : 0,
     };
-  }).slice(0, Math.min(opts.limit ?? 80, 120));
+  });
 
-  return { home: { lat, lng, cityName: opts.cityName || "" }, stores, products: list, categories: GROCERY_CATEGORIES };
+  return { home: { lat, lng, cityName: opts.cityName || "" }, stores, totalStores, products: list, total, categories: GROCERY_CATEGORIES };
 }
 
 catalog.get("/supermarket", async (c) => {
   const lat = parseFloat(c.req.query("lat") || ""), lng = parseFloat(c.req.query("lng") || "");
   const stores = (c.req.query("stores") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const limit = Math.min(Math.max(1, parseInt(c.req.query("limit") || "60", 10) || 60), 120);
+  const page = Math.max(1, parseInt(c.req.query("page") || "1", 10) || 1);
   const data = await supermarketData(c.env, {
     lat: Number.isFinite(lat) ? lat : undefined, lng: Number.isFinite(lng) ? lng : undefined,
     cityName: c.req.query("city") || "", stores, q: c.req.query("q") || "", category: c.req.query("category") || "",
+    sort: c.req.query("sort") || "", certified: c.req.query("certified") === "1",
+    instant: c.req.query("instant") === "1", inStock: c.req.query("instock") === "1",
+    limit, offset: (page - 1) * limit,
   });
-  return c.json(data);
+  return c.json({ ...data, page, limit, pages: Math.ceil((data.total ?? 0) / limit) });
 });
 
 // ---------- product listing / search ----------
 
-export async function listProducts(env: Env, opts: { q?: string; category?: string; store?: string; city?: string; sort?: string; featured?: boolean; limit?: number } = {}) {
+export interface ListOpts { q?: string; category?: string; store?: string; city?: string; sort?: string; featured?: boolean; limit?: number; offset?: number }
+
+// Build the shared WHERE clause + binds for both listing and counting, so the
+// product count shown in pagination always matches the filtered result set.
+function productFilter(opts: ListOpts): { whereSql: string; binds: unknown[] } {
   const where: string[] = [];
   const binds: unknown[] = [];
   if (opts.category) { where.push("p.category = ?"); binds.push(opts.category); }
@@ -186,8 +264,21 @@ export async function listProducts(env: Env, opts: { q?: string; category?: stri
   if (opts.store) { where.push(`EXISTS (SELECT 1 FROM offers o JOIN sellers s ON s.id=o.seller_id WHERE o.product_id=p.id AND o.active=1 AND s.handle=?)`); binds.push(opts.store); }
   if (opts.city) { where.push(`EXISTS (SELECT 1 FROM offers o JOIN store_cities sc ON sc.seller_id=o.seller_id WHERE o.product_id=p.id AND o.active=1 AND sc.city_slug=?)`); binds.push(opts.city); }
   if (opts.featured) where.push(`EXISTS (SELECT 1 FROM offers o WHERE o.product_id=p.id AND o.active=1 AND o.featured=1)`);
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
+}
+
+// Total number of products matching the filters (for pagination). Cheap: counts
+// rows in `products` with EXISTS subqueries, no per-offer aggregates.
+export async function countProducts(env: Env, opts: ListOpts = {}): Promise<number> {
+  const { whereSql, binds } = productFilter(opts);
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM products p ${whereSql}`).bind(...binds).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+export async function listProducts(env: Env, opts: ListOpts = {}) {
+  const { whereSql, binds } = productFilter(opts);
   const limit = Math.min(opts.limit ?? 60, 120);
+  const offset = Math.max(0, opts.offset ?? 0);
   const order = opts.sort === "price_asc" ? "min_price ASC"
     : opts.sort === "price_desc" ? "min_price DESC"
     : opts.sort === "rating" ? "p.rating_avg DESC, p.rating_count DESC"
@@ -209,8 +300,8 @@ export async function listProducts(env: Env, opts: { q?: string; category?: stri
         (SELECT json_extract(s.doc,'$.name') FROM offers o JOIN sellers s ON s.id = o.seller_id
           WHERE o.product_id = p.id AND o.active = 1 ORDER BY CAST(o.price AS REAL), o.id LIMIT 1) AS best_seller_name
      FROM products p ${whereSql}
-     ORDER BY ${order} LIMIT ?`,
-  ).bind(...binds, limit).all<any>();
+     ORDER BY ${order} LIMIT ? OFFSET ?`,
+  ).bind(...binds, limit, offset).all<any>();
 
   return (rows.results ?? []).map((r) => {
     const compare = r.best_compare ? parseFloat(r.best_compare) : 0;
@@ -229,11 +320,15 @@ export async function listProducts(env: Env, opts: { q?: string; category?: stri
 }
 
 catalog.get("/products", async (c) => {
-  const items = await listProducts(c.env, {
+  const limit = Math.min(Math.max(1, parseInt(c.req.query("limit") || "60", 10) || 60), 120);
+  const page = Math.max(1, parseInt(c.req.query("page") || "1", 10) || 1);
+  const opts = {
     q: c.req.query("q") ?? "", category: c.req.query("category") ?? "",
     store: c.req.query("store") ?? "", city: c.req.query("city") ?? "", sort: c.req.query("sort") ?? "",
-  });
-  return c.json({ count: items.length, products: items });
+    limit, offset: (page - 1) * limit,
+  };
+  const [items, total] = await Promise.all([listProducts(c.env, opts), countProducts(c.env, opts)]);
+  return c.json({ count: items.length, total, page, limit, pages: Math.ceil(total / limit), products: items });
 });
 
 // ---------- product detail ----------

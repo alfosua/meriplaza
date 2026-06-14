@@ -102,6 +102,7 @@ async function renderPaymentInstructions(){
 function payInstructionCard(store,method,m){
   if(method==="pago_movil"){ const x=m.pago_movil||{}; return '<div class="payhint"><b>'+esc(store)+' · Pago móvil</b><span>Banco: '+esc(x.bank||"Por confirmar")+'</span><span>Teléfono: '+esc(x.phone||"Por confirmar")+'</span><span>CI/RIF: '+esc(x.ci||"Por confirmar")+'</span></div>'; }
   if(method==="crypto"){ const x=m.crypto||{}; return '<div class="payhint"><b>'+esc(store)+' · Cripto</b><span>'+(esc(x.asset||"USDT"))+' / '+esc(x.network||"TRON")+'</span><span>'+esc(x.address||"Dirección por confirmar")+'</span></div>'; }
+  if(method==="quickpago"){ return '<div class="payhint payhint--qp"><b>⚡ '+esc(store)+' · QuickPago</b><span>Paga con un toque desde tu wallet QuickPago.</span><span>Confirmación instantánea, sin transferencias manuales.</span></div>'; }
   const x=m.transferencia||{}; return '<div class="payhint"><b>'+esc(store)+' · Transferencia</b><span>Banco: '+esc(x.bank||"Por confirmar")+'</span><span>Cuenta: '+esc(x.account||"Por confirmar")+'</span><span>Titular: '+esc(x.holder||"Por confirmar")+'</span></div>';
 }
 
@@ -114,6 +115,7 @@ async function submitCheckout(f){
   if(d.paymentMethod==="divisas_cash") Object.assign(methodData,{cashCurrency:"USD",receiptRef:d.bankReference||("USD-"+Date.now()),fxRate:d.fxRate||"577.55"});
   if(d.paymentMethod==="punto_de_venta") methodData.approvalRef=d.bankReference||("POS-"+Date.now());
   if(d.paymentMethod==="crypto") methodData.networkTxn=d.bankReference||"0xcheckout";
+  if(d.paymentMethod==="quickpago") methodData.qpReference=d.bankReference||("QP-"+Date.now());
   const msg=$("[data-checkout-msg]",f), btn=$("[data-checkout-submit]",f);
   if(msg) msg.textContent="Confirmando pago y generando factura...";
   if(btn) btn.disabled=true;
@@ -239,6 +241,16 @@ document.addEventListener("click",(e)=>{
   if(e.target.closest("[data-close-filters]")){ $("#filters")?.classList.remove("open"); }
 });
 
+// Store-filter typeahead: narrow the rendered store links as the user types.
+document.addEventListener("input",(e)=>{
+  if(e.target.matches("[data-store-filter]")){
+    const q=e.target.value.trim().toLowerCase();
+    $$("[data-store-list] [data-store-name]").forEach(a=>{
+      a.style.display = !q || a.dataset.storeName.includes(q) ? "" : "none";
+    });
+  }
+});
+
 // QuickPago portal
 document.addEventListener("click",(e)=>{
   const tab=e.target.closest("[data-qptab]"); if(tab){ const w=tab.dataset.qptab;
@@ -337,8 +349,79 @@ document.addEventListener("submit", async (e)=>{
     toast(r.ok?"Producto actualizado":"No se pudo guardar"); return; }
 });
 
+// Progressive image loading: show an animated skeleton while each photo loads,
+// then blur-up fade it in. Safe enhancement — without JS images render normally.
+function enhanceImages(root){
+  $$("img[loading=lazy]",root||document).forEach(img=>{
+    if(img.classList.contains("lazyimg")) return; // already enhanced
+    const box=img.closest(".thumb,.super-thumb,.gallery .main,.store-cover");
+    if(img.complete && img.naturalWidth){ img.classList.add("lazyimg","is-loaded"); return; }
+    img.classList.add("lazyimg");
+    if(box) box.classList.add("img-loading");
+    img.addEventListener("load",()=>{ img.classList.add("is-loaded"); if(box) box.classList.remove("img-loading"); },{once:true});
+    img.addEventListener("error",()=>{ img.classList.add("is-loaded"); if(box) box.classList.remove("img-loading"); },{once:true});
+  });
+}
+
+// Hero slideshow: auto-rotate, dots, arrows, swipe; pauses on hover.
+function initHeroShow(){
+  const root=$("[data-hero]"); if(!root) return;
+  const slides=$$("[data-hero-slide]",root), dots=$$("[data-hero-go]",root);
+  if(slides.length<2) return;
+  let i=0,timer=null;
+  function go(n){ i=(n+slides.length)%slides.length;
+    slides.forEach((s,k)=>s.classList.toggle("on",k===i));
+    dots.forEach((d,k)=>d.classList.toggle("on",k===i)); }
+  function start(){ stop(); timer=setInterval(()=>go(i+1),6000); }
+  function stop(){ if(timer){ clearInterval(timer); timer=null; } }
+  dots.forEach(d=>d.addEventListener("click",()=>{ go(+d.dataset.heroGo); start(); }));
+  root.querySelector("[data-hero-prev]")?.addEventListener("click",()=>{ go(i-1); start(); });
+  root.querySelector("[data-hero-next]")?.addEventListener("click",()=>{ go(i+1); start(); });
+  let x0=null;
+  root.addEventListener("touchstart",e=>{ x0=e.touches[0].clientX; },{passive:true});
+  root.addEventListener("touchend",e=>{ if(x0==null) return; const dx=e.changedTouches[0].clientX-x0; if(Math.abs(dx)>40){ go(dx<0?i+1:i-1); start(); } x0=null; });
+  root.addEventListener("mouseenter",stop); root.addEventListener("mouseleave",start);
+  start();
+}
+
+// Carousel arrows: scroll the associated rail left/right by ~one viewport.
+document.addEventListener("click",(e)=>{
+  const btn=e.target.closest("[data-rail-prev],[data-rail-next]"); if(!btn) return;
+  const wrap=btn.closest(".carousel"), rail=wrap&&wrap.querySelector("[data-rail]"); if(!rail) return;
+  const amount=Math.max(rail.clientWidth*0.8,220);
+  rail.scrollBy({left: btn.hasAttribute("data-rail-next")?amount:-amount, behavior:"smooth"});
+});
+
+// Progressive (infinite) product loading: observe the sentinel and append each
+// next page's server-rendered cards into [data-grid] until all pages load.
+function initInfinite(){
+  const s=$("[data-infinite]"), grid=$("[data-grid]");
+  if(!s||!grid) return;
+  let page=parseInt(s.dataset.page||"1",10)||1;
+  const pages=parseInt(s.dataset.pages||"1",10)||1;
+  const base=s.dataset.infinite, params=s.dataset.params||"";
+  let loading=false;
+  if(page>=pages){ s.remove(); return; }
+  const io=new IntersectionObserver(async(es)=>{
+    if(!es[0].isIntersecting||loading||page>=pages) return;
+    loading=true; s.classList.add("on"); page++;
+    const url=base+"?"+(params?params+"&":"")+"page="+page;
+    try{
+      const r=await fetch(url,{credentials:"include"});
+      const html=await r.text();
+      if(r.ok&&html.trim()){ grid.insertAdjacentHTML("beforeend",html); enhanceImages(grid); }
+    }catch(e){}
+    s.classList.remove("on"); loading=false;
+    if(page>=pages){ io.disconnect(); s.remove(); }
+  },{rootMargin:"700px"});
+  io.observe(s);
+}
+
 paint();
 prefillCheckoutProfile();
 renderPaymentInstructions();
 initHome();
+enhanceImages();
+initInfinite();
+initHeroShow();
 `;
