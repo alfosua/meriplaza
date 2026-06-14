@@ -46,7 +46,8 @@ not gated behind a Meriplaza account.
   - `crypto`: `{ network, asset, address }`
 - **qp_sessions** — `id (token), merchant_id, expires`.
 - **qp_transactions** — `id, merchant_id, amount, currency, method, status
-  (pending|confirmed), reference (QP-XXXX), payer, created_at`.
+  (pending|proof_submitted|confirmed|canceled|expired), reference (QP-XXXX),
+  payer, created_at`.
 
 ## 5. Features (implemented)
 
@@ -55,7 +56,10 @@ not gated behind a Meriplaza account.
   (bank/account/holder), crypto (network/asset/address).
 - **Create a charge (cobro)**: amount + currency + method → generates a shareable
   reference (`QP-XXXXXXXX`), status `pending`.
-- **Transactions list** with confirm action (`pending` → `confirmed`).
+- **Payer payment link** (`/quickpago/c/:reference`) with QR, WhatsApp share,
+  method-specific instructions, and proof submission.
+- **Transactions list** with lifecycle actions: proof submitted by payer, then
+  merchant can confirm, cancel, or expire the cobro.
 - Marketing **landing page** positioning it as a SalesFactory product built on
   the same gateway that powers Meriplaza.
 
@@ -65,11 +69,15 @@ not gated behind a Meriplaza account.
 | --- | --- |
 | `GET /quickpago` | Marketing landing |
 | `GET /quickpago/portal` | Merchant dashboard (login/register when signed out) |
+| `GET /quickpago/c/:reference` | Payer-facing charge page with QR/share/proof form |
 | `POST /quickpago/api/register` | Create merchant + session |
 | `POST /quickpago/api/login` / `logout` | Session management |
 | `POST /quickpago/api/methods` | Save cobro method config |
 | `POST /quickpago/api/charge` | Create a charge → `{ reference, status }` |
+| `POST /quickpago/api/pay/:reference` | Submit payer proof and move to `proof_submitted` |
 | `POST /quickpago/api/tx/:id/confirm` | Mark a transaction confirmed |
+| `POST /quickpago/api/tx/:id/cancel` | Close a pending/proof-submitted transaction as canceled |
+| `POST /quickpago/api/tx/:id/expire` | Close a pending/proof-submitted transaction as expired |
 
 All `/quickpago/*` routes are public at the Meriplaza auth gate; QuickPago
 enforces its own merchant auth internally via the `qp_session` cookie.
@@ -91,7 +99,6 @@ Demo merchant: `qp@demo.ve` / `qp123456`. Sign up a new merchant at
 
 - Charges are recorded but not yet executed through the real payment processors
   (no live PagoMóvil C2P confirmation or on-chain settlement).
-- No payment-link page / QR for the payer to complete the cobro (reference only).
 - No webhooks, payouts, fees, or multi-user merchant teams.
 - No email verification / password reset; sessions aren't rotated.
 

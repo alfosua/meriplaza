@@ -6,6 +6,7 @@ const API = location.origin;
 const KEY = "meriplaza:cart:v1";
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const SellerPay = new Map();
 
 const Cart = {
   items(){ try { return JSON.parse(localStorage.getItem(KEY))||[] } catch { return [] } },
@@ -26,7 +27,8 @@ function toast(msg){ let t=$(".toast"); if(!t){ t=document.createElement("div");
   t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),1800); }
 
 function paint(){ const n=Cart.count(); $$(".cart-count").forEach(e=>{ e.textContent=n; e.hidden=n===0; });
-  const d=$("#drawer"); if(d && d.classList.contains("show")) renderDrawer(); }
+  const d=$("#drawer"); if(d && d.classList.contains("show")) renderDrawer();
+  renderCartPage(); }
 
 function ensureDrawer(){
   if($("#drawer")) return;
@@ -54,25 +56,87 @@ function renderDrawer(){
    ).join('')
    :'<div style="text-align:center;color:var(--ink-2);padding:3rem 1rem">Tu carrito está vacío.</div>')+'</div>'+
    (groups.length?'<footer><div class="spread" style="font-size:1.15rem;font-weight:800;margin-bottom:.7rem"><span>Total</span><span>'+totStr+'</span></div>'+
-     '<button class="btn btn--accent btn--block" id="checkout">Pagar ahora</button></footer>':'');
+     '<a class="btn btn--accent btn--block" href="/carrito">Ir a pagar</a></footer>':'');
   $("#x").onclick=closeCart;
   $$("[data-inc]",d).forEach(b=>b.onclick=()=>Cart.setQty(b.dataset.inc,qof(b.dataset.inc)+1));
   $$("[data-dec]",d).forEach(b=>b.onclick=()=>Cart.setQty(b.dataset.dec,qof(b.dataset.dec)-1));
   $$("[data-rm]",d).forEach(b=>b.onclick=()=>Cart.remove(b.dataset.rm));
-  const co=$("#checkout"); if(co) co.onclick=checkout;
 }
 function qof(id){ const i=Cart.items().find(x=>x.offerId===id); return i?i.qty:0; }
 
-async function checkout(){
-  const groups=Cart.groups();
-  if(!groups.length) return;
-  try{
-    for(const g of groups){
-      await fetch(API+"/catalog/orders",{method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({sellerId:g.sellerId,channel:"web",items:g.lines.map(l=>({offerId:l.offerId,quantity:l.qty}))})});
+function renderCartPage(){
+  const host=$("[data-cart-lines]"); if(!host) return;
+  const groups=Cart.groups(), totals={};
+  groups.forEach(g=>totals[g.currency]=(totals[g.currency]||0)+parseFloat(g.subtotal));
+  const totalText=Object.entries(totals).map(([c,v])=>v.toFixed(2)+" "+c).join(" · ")||"0.00";
+  const totalsEl=$("[data-cart-totals]"); if(totalsEl) totalsEl.textContent="Total: "+totalText;
+  const submit=$("[data-checkout-submit]"); if(submit) submit.disabled=groups.length===0;
+  if(!groups.length){ host.innerHTML='<div class="emptycart"><h2>Tu carrito está vacío</h2><p class="muted">Agrega productos del mercado para continuar.</p><a class="btn btn--primary" href="/">Explorar productos</a></div>'; return; }
+  host.innerHTML=groups.map(g=>
+    '<div class="checkout-store"><div class="spread"><div><b>'+esc(g.sellerName)+'</b><div class="muted">'+g.lines.length+' producto(s)</div></div><span class="price">'+g.subtotal+' '+esc(g.currency)+'</span></div>'+
+    g.lines.map(l=>'<div class="cartline"><div><b>'+esc(l.title)+'</b><small>'+esc(l.price)+' '+esc(l.currency)+' c/u</small></div>'+
+      '<div class="qty"><button type="button" data-dec="'+l.offerId+'">−</button><span>'+l.qty+'</span><button type="button" data-inc="'+l.offerId+'">+</button></div>'+
+      '<strong>'+((parseFloat(l.price)||0)*l.qty).toFixed(2)+' '+esc(l.currency)+'</strong><button type="button" class="remove" data-rm="'+l.offerId+'">Eliminar</button></div>').join('')+
+    '</div>').join('');
+  $$("[data-inc]",host).forEach(b=>b.onclick=()=>Cart.setQty(b.dataset.inc,qof(b.dataset.inc)+1));
+  $$("[data-dec]",host).forEach(b=>b.onclick=()=>Cart.setQty(b.dataset.dec,qof(b.dataset.dec)-1));
+  $$("[data-rm]",host).forEach(b=>b.onclick=()=>Cart.remove(b.dataset.rm));
+  renderPaymentInstructions();
+}
+
+async function renderPaymentInstructions(){
+  const host=$("[data-payment-instructions]"); if(!host) return;
+  const groups=Cart.groups(), method=$("#checkout-form")?.elements.paymentMethod?.value||"transferencia";
+  if(!groups.length){ host.innerHTML=""; return; }
+  const cards=[];
+  for(const g of groups){
+    if(!SellerPay.has(g.sellerId)){
+      const r=await getJSON(API+"/catalog/sellers/by-id/"+encodeURIComponent(g.sellerId)+"/payment-methods");
+      SellerPay.set(g.sellerId,r.ok?r.data:{seller:{name:g.sellerName},paymentMethods:{}});
     }
-    Cart.save([]); closeCart(); toast("¡Pedido creado! Gracias por tu compra.");
-  }catch(e){ toast("No se pudo completar el checkout."); }
+    const data=SellerPay.get(g.sellerId), m=data.paymentMethods||{}, s=data.seller?.name||g.sellerName;
+    cards.push(payInstructionCard(s,method,m));
+  }
+  host.innerHTML=cards.join("");
+}
+function payInstructionCard(store,method,m){
+  if(method==="pago_movil"){ const x=m.pago_movil||{}; return '<div class="payhint"><b>'+esc(store)+' · Pago móvil</b><span>Banco: '+esc(x.bank||"Por confirmar")+'</span><span>Teléfono: '+esc(x.phone||"Por confirmar")+'</span><span>CI/RIF: '+esc(x.ci||"Por confirmar")+'</span></div>'; }
+  if(method==="crypto"){ const x=m.crypto||{}; return '<div class="payhint"><b>'+esc(store)+' · Cripto</b><span>'+(esc(x.asset||"USDT"))+' / '+esc(x.network||"TRON")+'</span><span>'+esc(x.address||"Dirección por confirmar")+'</span></div>'; }
+  const x=m.transferencia||{}; return '<div class="payhint"><b>'+esc(store)+' · Transferencia</b><span>Banco: '+esc(x.bank||"Por confirmar")+'</span><span>Cuenta: '+esc(x.account||"Por confirmar")+'</span><span>Titular: '+esc(x.holder||"Por confirmar")+'</span></div>';
+}
+
+async function submitCheckout(f){
+  if(!Cart.count()) return;
+  const d=formData(f);
+  const methodData={};
+  if(d.paymentMethod==="transferencia") methodData.bankReference=d.bankReference||("WEB-"+Date.now());
+  if(d.paymentMethod==="pago_movil") Object.assign(methodData,{payerPhone:d.payerPhone||"04140000000",payerBankCode:d.payerBankCode||"0102",payerId:d.buyerTaxId||"V-00000000",otp:d.otp||"123456"});
+  if(d.paymentMethod==="divisas_cash") Object.assign(methodData,{cashCurrency:"USD",receiptRef:d.bankReference||("USD-"+Date.now()),fxRate:d.fxRate||"577.55"});
+  if(d.paymentMethod==="punto_de_venta") methodData.approvalRef=d.bankReference||("POS-"+Date.now());
+  if(d.paymentMethod==="crypto") methodData.networkTxn=d.bankReference||"0xcheckout";
+  const msg=$("[data-checkout-msg]",f), btn=$("[data-checkout-submit]",f);
+  if(msg) msg.textContent="Confirmando pago y generando factura...";
+  if(btn) btn.disabled=true;
+  try{
+    const r=await postJSON(API+"/catalog/checkout",{
+      channel:"web",
+      buyer:{name:d.buyerName||"Consumidor final",taxId:d.buyerTaxId||"",email:d.buyerEmail||""},
+      shippingAddress:{city:d.city||"Caracas",address1:d.address1||"",country:"VE"},
+      shipment:{method:d.shipmentMethod||"delivery",notes:d.shipmentNotes||""},
+      payment:{method:d.paymentMethod||"transferencia",methodData},
+      items:Cart.items().map(l=>({offerId:l.offerId,quantity:l.qty}))
+    });
+    if(!r.ok) throw new Error(r.data.message||"checkout_failed");
+    const ids=(r.data.orders||[]).map(o=>o.id).filter(Boolean);
+    Cart.save([]);
+    const paid=(r.data.orders||[]).filter(o=>o.status==="invoiced").length;
+    if(msg) msg.innerHTML=paid?("Pago confirmado y factura generada para "+paid+" pedido(s)."):"Pedido creado. Revisa las instrucciones de pago.";
+    toast(paid?"Pago confirmado y factura generada.":"Pedido creado.");
+    if(ids.length) setTimeout(()=>location.href="/pedido/"+encodeURIComponent(ids[0])+"?ids="+encodeURIComponent(ids.join(",")),500);
+  }catch(e){
+    if(msg) msg.textContent="No se pudo completar el checkout: "+(e.message||"intenta de nuevo");
+    toast("No se pudo completar el checkout.");
+  }finally{ if(btn) btn.disabled=Cart.count()===0; }
 }
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -104,6 +168,20 @@ document.addEventListener("submit",async (e)=>{
 function formData(f){ const o={}; new FormData(f).forEach((v,k)=>o[k]=v); return o; }
 async function postJSON(url, body){ const r=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},credentials:"include",body:JSON.stringify(body)});
   const t=await r.text().catch(()=>""); let j={}; try{j=JSON.parse(t)}catch{} return {ok:r.ok,status:r.status,data:j}; }
+async function getJSON(url){ const r=await fetch(url,{credentials:"include"}); const t=await r.text().catch(()=>""); let j={}; try{j=JSON.parse(t)}catch{} return {ok:r.ok,status:r.status,data:j}; }
+
+async function prefillCheckoutProfile(){
+  const f=$("#checkout-form"); if(!f) return;
+  const r=await getJSON(API+"/auth/profile"); if(!r.ok||!r.data.profile) return;
+  const p=r.data.profile, a=(p.addresses||[]).find(x=>x.isDefault)||(p.addresses||[])[0]||{}, fp=(p.fiscalProfiles||[]).find(x=>x.isDefault)||(p.fiscalProfiles||[])[0]||{};
+  const set=(name,val)=>{ const el=f.elements[name]; if(el && !el.value && val) el.value=val; };
+  set("buyerName",fp.name||a.recipient);
+  set("buyerTaxId",fp.taxId);
+  set("buyerEmail",fp.email);
+  set("city",a.city);
+  set("address1",a.address1);
+  set("shipmentNotes",a.notes);
+}
 
 // Login / register tab switch
 document.addEventListener("click",(e)=>{
@@ -113,6 +191,7 @@ document.addEventListener("click",(e)=>{
   const lf=$("#login-form"), rf=$("#register-form"); if(lf&&rf){ lf.hidden=which!=="login"; rf.hidden=which!=="register"; }
 });
 document.addEventListener("change",(e)=>{ if(e.target.name==="isStore"){ const sf=$("[data-store-fields]"); if(sf) sf.hidden=!e.target.checked; }});
+document.addEventListener("change",(e)=>{ if(e.target.name==="paymentMethod") renderPaymentInstructions(); });
 
 document.addEventListener("submit", async (e)=>{
   const f=e.target;
@@ -125,6 +204,21 @@ document.addEventListener("submit", async (e)=>{
   if(f.id==="admin-new-offer"||f.id==="store-new-offer"){ e.preventDefault(); const d=formData(f);
     const body={productId:d.productId,sellerId:d.sellerId||f.dataset.seller,price:d.price,currency:d.currency,stock:Number(d.stock||0)};
     const r=await postJSON(API+"/catalog/offers",body); toast(r.ok?"Oferta publicada":"Error: "+(r.data.message||r.status)); if(r.ok) setTimeout(()=>location.reload(),900); return; }
+  if(f.id==="checkout-form"){ e.preventDefault(); await submitCheckout(f); return; }
+  if(f.id==="profile-form"){ e.preventDefault(); const d=formData(f);
+    const body={addresses:[{id:"default",label:d.addrLabel,recipient:d.addrRecipient,phone:d.addrPhone,city:d.addrCity,address1:d.addrAddress1,notes:d.addrNotes,isDefault:true}],
+      fiscalProfiles:[{id:"default",label:d.fiscalLabel,name:d.fiscalName,taxId:d.fiscalTaxId,email:d.fiscalEmail,fiscalAddress:d.fiscalAddress,isDefault:true}]};
+    const r=await postJSON(API+"/auth/profile",body); const el=f.querySelector("[data-err]");
+    if(el) el.textContent=r.ok?"Datos guardados. Se usarán en tu próximo checkout.":(r.data.message||"No se pudo guardar");
+    toast(r.ok?"Datos guardados":"No se pudo guardar"); return; }
+  if(f.dataset.orderFulfillment){ e.preventDefault(); const r=await postJSON(API+"/catalog/orders/"+encodeURIComponent(f.dataset.orderFulfillment)+"/fulfillment",formData(f));
+    const el=f.querySelector("[data-err]"); if(el) el.textContent=r.ok?"Actualizado":(r.data.message||"Error");
+    toast(r.ok?"Pedido actualizado":"No se pudo actualizar"); if(r.ok) setTimeout(()=>location.reload(),700); return; }
+  if(f.id==="seller-payment-methods"){ e.preventDefault(); const d=formData(f);
+    const body={pago_movil:{bank:d.pm_bank,phone:d.pm_phone,ci:d.pm_ci},transferencia:{bank:d.tr_bank,account:d.tr_account,holder:d.tr_holder},crypto:{network:d.cr_network,asset:d.cr_asset,address:d.cr_address}};
+    const r=await postJSON(API+"/catalog/sellers/"+encodeURIComponent(f.dataset.seller)+"/payment-methods",body); const el=f.querySelector("[data-err]");
+    if(el) el.textContent=r.ok?"Métodos guardados. Tus compradores verán estas instrucciones en checkout.":(r.data.message||"No se pudo guardar");
+    toast(r.ok?"Métodos guardados":"No se pudo guardar"); return; }
 });
 
 document.addEventListener("click", async (e)=>{
@@ -159,12 +253,20 @@ document.addEventListener("submit", async (e)=>{
     const body={pagomovil:{bank:d.pm_bank,phone:d.pm_phone,ci:d.pm_ci},transfer:{bank:d.tr_bank,account:d.tr_account,holder:d.tr_holder},crypto:{network:d.cr_network,asset:d.cr_asset,address:d.cr_address}};
     const r=await postJSON("/quickpago/api/methods",body); toast(r.ok?"Métodos guardados":"Error"); }
   if(f.id==="qp-charge"){ e.preventDefault(); const r=await postJSON("/quickpago/api/charge",formData(f));
-    if(r.ok){ toast("Cobro creado: "+r.data.reference); setTimeout(()=>location.reload(),900);} else toast("Error"); }
+    if(r.ok){ toast("Cobro creado: "+r.data.reference); setTimeout(()=>location.href="/quickpago/c/"+encodeURIComponent(r.data.reference),500);} else toast("Error"); }
+  if(f.id==="qp-pay-proof"){ e.preventDefault(); const r=await postJSON("/quickpago/api/pay/"+encodeURIComponent(f.dataset.ref),formData(f));
+    const msg=f.querySelector("[data-err]"); if(msg) msg.textContent=r.ok?(r.data.message||"Comprobante enviado"):(r.data.message||"Error");
+    toast(r.ok?"Comprobante enviado":"No se pudo reportar el pago"); if(r.ok) f.reset(); }
 });
 document.addEventListener("click", async (e)=>{
   if(e.target.closest("[data-qp-logout]")){ await postJSON("/quickpago/api/logout",{}); location.href="/quickpago"; }
   const cf=e.target.closest("[data-qp-confirm]"); if(cf){ await postJSON("/quickpago/api/tx/"+cf.dataset.qpConfirm+"/confirm",{}); location.reload(); }
+  const cc=e.target.closest("[data-qp-cancel]"); if(cc){ await postJSON("/quickpago/api/tx/"+cc.dataset.qpCancel+"/cancel",{}); location.reload(); }
+  const ce=e.target.closest("[data-qp-expire]"); if(ce){ await postJSON("/quickpago/api/tx/"+ce.dataset.qpExpire+"/expire",{}); location.reload(); }
+  const cp=e.target.closest("[data-copy]"); if(cp){ try{ await navigator.clipboard.writeText(cp.dataset.copy); toast("Link copiado"); }catch{ toast(cp.dataset.copy); } }
 });
 
 paint();
+prefillCheckoutProfile();
+renderPaymentInstructions();
 `;

@@ -192,6 +192,42 @@ section{padding:1.6rem 0}
 .qty button{width:28px;height:28px;border:0;background:none;font-size:1.1rem;cursor:pointer;color:var(--blue)}
 .qty span{min-width:1.4rem;text-align:center;font-weight:700;font-size:.85rem}
 
+/* Cart / checkout page */
+.checkout-page{padding-top:1rem}
+.checkout-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;padding:1.5rem 0 1rem}
+.checkout-head h1{margin:.15rem 0 .25rem;font-size:clamp(2rem,5vw,3rem)}
+.checkout-grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:1.25rem;align-items:start;padding-top:.5rem}
+.checkout-side{position:sticky;top:112px}
+.checkout-card,.checkout-form{padding:1rem;content-visibility:visible;contain-intrinsic-size:auto}
+.checkout-card:hover,.checkout-form:hover{transform:none;box-shadow:none}
+.emptycart{text-align:center;padding:3rem 1rem}
+.checkout-store{padding:.4rem 0 1rem;border-bottom:1px solid var(--line)}
+.checkout-store:last-child{border-bottom:0;padding-bottom:.2rem}
+.cartline{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:.75rem;align-items:center;padding:.85rem 0;border-top:1px solid var(--line)}
+.cartline b{display:block;font-size:.95rem}.cartline small{display:block;color:var(--ink-2);font-size:.78rem;margin-top:.12rem}
+.cartline .remove{border:0;background:none;color:var(--ink-2);font:inherit;font-size:.78rem;cursor:pointer}
+.cartline .remove:hover{color:var(--blue)}
+.checkout-form h2{font-size:1rem;margin:.25rem 0 .75rem}
+.checkout-form h2:not(:first-child){margin-top:1.2rem}
+.checkout-form label{display:block;font-size:.82rem;color:var(--ink-2);font-weight:600;margin-top:.65rem}
+.checkout-form input,.checkout-form select,.checkout-form textarea{width:100%;padding:.62rem .72rem;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:.28rem;background:#fff;color:var(--ink)}
+.checkout-form input:focus,.checkout-form select:focus,.checkout-form textarea:focus{outline:0;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-050)}
+.checkout-total{margin:1rem 0 .75rem;padding:.85rem 1rem;border-radius:14px;background:var(--blue-050);color:var(--blue);font-weight:800;text-align:center}
+.pay-instructions{display:grid;gap:.55rem;margin-top:.75rem}.payhint{border:1px solid var(--line);border-radius:14px;padding:.7rem .8rem;background:var(--bg-soft);font-size:.82rem}.payhint b{display:block;margin-bottom:.25rem}.payhint span{display:block;color:var(--ink-2);word-break:break-word}
+@media(max-width:900px){.checkout-grid{grid-template-columns:1fr}.checkout-side{position:static}.checkout-head{align-items:flex-start;flex-direction:column}.cartline{grid-template-columns:1fr auto}.cartline strong{grid-column:1}.cartline .remove{justify-self:end}}
+
+/* Order receipt */
+.receipt-page{padding-top:1rem}
+.receipt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;padding-top:.5rem}
+.receipt-grid--wide{grid-template-columns:minmax(0,1.4fr) minmax(240px,.6fr)}
+.receipt-card{padding:1rem;content-visibility:visible;contain-intrinsic-size:auto}.receipt-card:hover{transform:none;box-shadow:none}
+.receipt-card h2{font-size:1rem;margin:.1rem 0 .8rem}
+.receipt-switch{display:flex;gap:.45rem;flex-wrap:wrap;padding:.65rem;margin-bottom:1rem;content-visibility:visible}.receipt-switch:hover{transform:none;box-shadow:none}
+.receipt-switch a{border:1px solid var(--line);border-radius:var(--pill);padding:.35rem .7rem;font-size:.82rem;font-weight:650}.receipt-switch a.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.receipt-timeline{list-style:none;margin:0;padding:0;display:grid;gap:.65rem}.receipt-timeline li{display:flex;align-items:center;gap:.6rem;color:var(--ink-2);font-weight:600}.receipt-timeline li span{width:18px;height:18px;border-radius:50%;border:2px solid var(--line);background:#fff}.receipt-timeline li.done{color:var(--ink)}.receipt-timeline li.done span{border-color:var(--good);background:var(--good);box-shadow:inset 0 0 0 4px #fff}
+.payline,.receipt-line,.receipt-total{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding:.65rem 0}.payline b,.receipt-line b,.receipt-total b{text-align:right}.payline b{word-break:break-word}.receipt-line small{color:var(--ink-2);font-weight:500}.receipt-total.grand{font-size:1.15rem;font-weight:850;color:var(--blue)}
+@media(max-width:760px){.receipt-grid--wide{grid-template-columns:1fr}.payline,.receipt-line,.receipt-total{align-items:flex-start}}
+
 /* entrance */
 .fade-up{animation:fadeUp .45s ease both}
 .stagger>*{animation:fadeUp .45s ease both}

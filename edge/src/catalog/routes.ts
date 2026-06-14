@@ -9,6 +9,8 @@ import type { Env } from "../lib/env.ts";
 import { newID, nowISO } from "../lib/env.ts";
 import * as ident from "../lib/ident.ts";
 import { priceOrder, type ProductLike, type CartItem } from "../lib/pricing.ts";
+import { confirm, isKnownMethod, type Method } from "../payments/processors.ts";
+import { currentUser } from "../auth/session.ts";
 
 export const catalog = new Hono<{ Bindings: Env }>();
 
@@ -208,6 +210,21 @@ catalog.post("/sellers/:id/cities", async (c) => {
   return c.json({ ok: true, cities });
 });
 
+// Configure merchant payment instructions shown during Meriplaza checkout.
+catalog.post("/sellers/:id/payment-methods", async (c) => {
+  const sellerId = c.req.param("id");
+  const user = await currentUser(c.env, c.req.header("Cookie"));
+  if (user?.role === "store" && user.sellerId !== sellerId) return c.json({ error: "forbidden" }, 403);
+  const row = await c.env.DB.prepare(`SELECT doc FROM sellers WHERE id=?`).bind(sellerId).first<{ doc: string }>();
+  if (!row) return c.json({ error: "not_found" }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const seller = safeJson<any>(row.doc, {});
+  seller.paymentMethods = normalizePaymentMethods(b);
+  await c.env.DB.prepare(`UPDATE sellers SET doc=? WHERE id=?`).bind(json(seller), sellerId).run();
+  await c.env.CACHE.delete("marketplace");
+  return c.json({ ok: true, paymentMethods: seller.paymentMethods });
+});
+
 // Add a review and recompute the product's rating aggregate.
 catalog.post("/products/:slug/reviews", async (c) => {
   const p = await c.env.DB.prepare(`SELECT id FROM products WHERE slug = ?`).bind(c.req.param("slug")).first<{ id: string }>();
@@ -268,6 +285,13 @@ catalog.get("/sellers/:handle", async (c) => {
   return c.json(sf);
 });
 
+catalog.get("/sellers/by-id/:id/payment-methods", async (c) => {
+  const row = await c.env.DB.prepare(`SELECT doc FROM sellers WHERE id=?`).bind(c.req.param("id")).first<{ doc: string }>();
+  if (!row) return c.json({ error: "not_found" }, 404);
+  const seller = safeJson<any>(row.doc, {});
+  return c.json({ seller: { id: seller.id, name: seller.name }, paymentMethods: seller.paymentMethods || {} });
+});
+
 // ---------- orders ----------
 
 catalog.post("/orders", async (c) => {
@@ -317,6 +341,143 @@ catalog.post("/orders", async (c) => {
   return c.json(order, 201);
 });
 
+// Customer checkout: split a cart by store, create one order + payment intent
+// per store, confirm each intent, and attach fiscal invoice metadata when paid.
+catalog.post("/checkout", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body || !Array.isArray(body.items) || body.items.length === 0) {
+    return c.json({ error: "validation_failed", message: "items required" }, 422);
+  }
+  const method = String(body.payment?.method ?? "transferencia");
+  if (!isKnownMethod(method)) return c.json({ error: "validation_failed", message: `unknown payment method "${method}"` }, 422);
+  const user = await currentUser(c.env, c.req.header("Cookie"));
+
+  const cart = normalizeCart(body.items);
+  if (cart.length === 0) return c.json({ error: "validation_failed", message: "valid items required" }, 422);
+  const offerIds = [...new Set(cart.map((i) => i.offerId))];
+  const offers = new Map<string, any>();
+  for (const id of offerIds) {
+    const row = await c.env.DB.prepare(
+      `SELECT o.id, o.price, o.currency, o.tax_rate, o.stock, o.seller_id,
+              p.title, s.doc AS seller_doc
+         FROM offers o
+         JOIN products p ON p.id = o.product_id
+         JOIN sellers s ON s.id = o.seller_id
+        WHERE o.id = ? AND o.active = 1`,
+    ).bind(id).first<any>();
+    if (!row) return c.json({ error: "validation_failed", message: `unknown offer ${id}` }, 422);
+    offers.set(id, row);
+  }
+
+  const bySeller = new Map<string, { seller: any; items: CartItem[] }>();
+  for (const line of cart) {
+    const offer = offers.get(line.offerId);
+    const group = bySeller.get(offer.seller_id) ?? { seller: offer, items: [] };
+    group.items.push({ productId: line.offerId, quantity: line.quantity });
+    bySeller.set(offer.seller_id, group);
+  }
+
+  const orders: any[] = [];
+  for (const [sellerId, group] of bySeller) {
+    const sellerDoc = safeJson<any>(group.seller.seller_doc, {});
+    const products = new Map<string, ProductLike>();
+    for (const it of group.items) {
+      const o = offers.get(it.productId);
+      products.set(o.id, { id: o.id, title: o.title, price: o.price, currency: o.currency, taxRate: o.tax_rate, stock: o.stock, active: true });
+    }
+
+    let priced;
+    try { priced = priceOrder(group.seller.currency, products, group.items); }
+    catch (e) { return c.json({ error: "validation_failed", message: (e as Error).message }, 422); }
+
+    const orderId = newID("ord");
+    const piId = newID("pi");
+    const now = nowISO();
+    const paymentIntent = {
+      id: piId,
+      amount: { value: priced.grandTotal, currency: priced.currency },
+      method: method as Method,
+      status: "requires_confirmation",
+      merchantId: sellerDoc.merchantId || `m_${sellerId}`,
+      orderRef: orderId,
+      description: `Meriplaza ${orderId}`,
+      methodData: body.payment?.methodData ?? {},
+      nextAction: null as unknown,
+      settlement: null as unknown,
+      failureReason: "",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const res = confirm(method as Method, { id: piId, amount: paymentIntent.amount, methodData: paymentIntent.methodData }, nowISO());
+    paymentIntent.status = res.status;
+    paymentIntent.nextAction = res.nextAction ?? null;
+    paymentIntent.settlement = res.settlement ?? null;
+    paymentIntent.failureReason = res.failure ?? "";
+    paymentIntent.updatedAt = nowISO();
+
+    const invoice = paymentIntent.status === "succeeded" ? buildFiscalInvoice(orderId, priced, body, sellerDoc, paymentIntent) : null;
+    const order = {
+      id: orderId,
+      sellerId,
+      channel: body.channel ?? "web",
+      lines: priced.lines,
+      currency: priced.currency,
+      subtotal: priced.subtotal,
+      taxTotal: priced.taxTotal,
+      grandTotal: priced.grandTotal,
+      status: invoice ? "invoiced" : paymentIntent.status === "requires_action" ? "payment_action_required" : paymentIntent.status === "failed" ? "payment_failed" : "pending_payment",
+      paymentIntentId: piId,
+      invoiceId: invoice?.id ?? "",
+      invoice,
+      payment: {
+        method,
+        status: paymentIntent.status,
+        nextAction: paymentIntent.nextAction,
+        settlement: paymentIntent.settlement,
+        failureReason: paymentIntent.failureReason,
+      },
+      buyerName: body.buyer?.name ?? body.buyerName ?? "",
+      buyerTaxId: body.buyer?.taxId ?? body.buyerTaxId ?? "",
+      buyerEmail: body.buyer?.email ?? "",
+      userId: body.userId ?? user?.id ?? "",
+      shippingAddress: body.shippingAddress ?? {},
+      shipment: {
+        status: "pending",
+        method: body.shipment?.method ?? sellerDoc.shipping?.[0]?.provider ?? "delivery",
+        city: body.shippingAddress?.city ?? "",
+        notes: body.shipment?.notes ?? "",
+      },
+      merchant: {
+        id: sellerId,
+        name: sellerDoc.name ?? "",
+        rif: sellerDoc.taxId ?? "",
+        merchantId: sellerDoc.merchantId || `m_${sellerId}`,
+      },
+      createdAt: nowISO(),
+    };
+
+    const reserve = order.lines.map((l: any) =>
+      c.env.DB.prepare(`UPDATE offers SET stock = stock - ? WHERE id = ? AND stock >= ?`).bind(l.quantity, l.productId, l.quantity));
+    const reserved = await c.env.DB.batch(reserve);
+    if (reserved.some((r) => (r.meta?.changes ?? 0) === 0)) {
+      const undo = order.lines.filter((_: any, i: number) => (reserved[i].meta?.changes ?? 0) > 0)
+        .map((l: any) => c.env.DB.prepare(`UPDATE offers SET stock = stock + ? WHERE id = ?`).bind(l.quantity, l.productId));
+      if (undo.length) await c.env.DB.batch(undo);
+      return c.json({ error: "out_of_stock", message: "insufficient stock" }, 409);
+    }
+
+    await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO payment_intents (id, merchant_id, idempotency_key, doc) VALUES (?, ?, ?, ?)`)
+        .bind(paymentIntent.id, paymentIntent.merchantId, `checkout:${order.id}`, json(paymentIntent)),
+      c.env.DB.prepare(`INSERT INTO orders (id, seller_id, doc) VALUES (?,?,?)`).bind(order.id, order.sellerId, json(order)),
+    ]);
+    orders.push(order);
+  }
+
+  return c.json({ ok: true, orders }, 201);
+});
+
 catalog.get("/orders/:id", async (c) => {
   const row = await c.env.DB.prepare(`SELECT doc FROM orders WHERE id = ?`).bind(c.req.param("id")).first<{ doc: string }>();
   if (!row) return c.json({ error: "not_found" }, 404);
@@ -335,6 +496,32 @@ catalog.post("/orders/:id/mark-paid", async (c) => {
   return c.json(order);
 });
 
+catalog.post("/orders/:id/fulfillment", async (c) => {
+  const row = await c.env.DB.prepare(`SELECT doc FROM orders WHERE id = ?`).bind(c.req.param("id")).first<{ doc: string }>();
+  if (!row) return c.json({ error: "not_found" }, 404);
+  const order = JSON.parse(row.doc);
+  const user = await currentUser(c.env, c.req.header("Cookie"));
+  if (user?.role === "store" && user.sellerId !== order.sellerId) return c.json({ error: "forbidden" }, 403);
+
+  const b = await c.req.json().catch(() => ({}));
+  const status = String(b.status || order.shipment?.status || "pending");
+  if (!["pending", "preparing", "ready", "shipped", "delivered", "canceled"].includes(status)) {
+    return c.json({ error: "validation_failed", message: "invalid shipment status" }, 422);
+  }
+  order.shipment = {
+    ...(order.shipment || {}),
+    status,
+    carrier: String(b.carrier ?? order.shipment?.carrier ?? "").slice(0, 80),
+    tracking: String(b.tracking ?? order.shipment?.tracking ?? "").slice(0, 120),
+    notes: String(b.notes ?? order.shipment?.notes ?? "").slice(0, 240),
+    updatedAt: nowISO(),
+  };
+  if (status === "delivered") order.status = "fulfilled";
+  if (status === "canceled") order.status = "canceled";
+  await c.env.DB.prepare(`UPDATE orders SET doc = ? WHERE id = ?`).bind(json(order), order.id).run();
+  return c.json(order);
+});
+
 // Orders for a seller (store dashboard).
 catalog.get("/sellers/:id/orders", async (c) => {
   const rows = await c.env.DB.prepare(`SELECT doc FROM orders WHERE seller_id = ? ORDER BY created_at DESC LIMIT 100`).bind(c.req.param("id")).all<{ doc: string }>();
@@ -347,3 +534,66 @@ function firstImage(imagesJson: string): string | null {
   return arr.length ? arr[0] : null;
 }
 function safeJson<T>(s: string, fallback: T): T { try { return JSON.parse(s); } catch { return fallback; } }
+
+function normalizePaymentMethods(b: any) {
+  return {
+    pago_movil: b.pago_movil ? {
+      bank: String(b.pago_movil.bank || "").slice(0, 80),
+      phone: String(b.pago_movil.phone || "").slice(0, 40),
+      ci: String(b.pago_movil.ci || "").slice(0, 40),
+    } : null,
+    transferencia: b.transferencia ? {
+      bank: String(b.transferencia.bank || "").slice(0, 80),
+      account: String(b.transferencia.account || "").slice(0, 80),
+      holder: String(b.transferencia.holder || "").slice(0, 120),
+    } : null,
+    crypto: b.crypto ? {
+      network: String(b.crypto.network || "TRON").slice(0, 40),
+      asset: String(b.crypto.asset || "USDT").slice(0, 20),
+      address: String(b.crypto.address || "").slice(0, 160),
+    } : null,
+  };
+}
+
+function normalizeCart(items: any[]): Array<{ offerId: string; quantity: number }> {
+  return items.map((i) => ({ offerId: String(i.offerId), quantity: Number(i.quantity) }))
+    .filter((i) => i.offerId && Number.isInteger(i.quantity) && i.quantity > 0);
+}
+
+function buildFiscalInvoice(orderId: string, priced: any, body: any, seller: any, pi: any) {
+  const createdAt = nowISO();
+  return {
+    id: newID("fac"),
+    number: orderId.replace(/^ord_/, "").slice(0, 9).toUpperCase(),
+    controlNumber: `SF-${orderId.slice(-9).toUpperCase()}`,
+    type: "FACTURA",
+    currency: priced.currency,
+    subtotal: priced.subtotal,
+    ivaAmount: priced.taxTotal,
+    total: priced.grandTotal,
+    buyer: {
+      name: body.buyer?.name ?? body.buyerName ?? "Consumidor final",
+      taxId: body.buyer?.taxId ?? body.buyerTaxId ?? "",
+      email: body.buyer?.email ?? "",
+      address: body.shippingAddress ?? {},
+    },
+    merchant: {
+      name: seller.name ?? "",
+      rif: seller.taxId ?? "",
+      fiscalAddress: seller.address ?? "",
+      merchantId: seller.merchantId ?? "",
+    },
+    lines: priced.lines.map((l: any) => ({
+      description: l.title,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      ivaRate: l.taxRate,
+    })),
+    payment: {
+      intentId: pi.id,
+      method: pi.method,
+      settlement: pi.settlement,
+    },
+    createdAt,
+  };
+}

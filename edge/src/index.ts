@@ -14,7 +14,7 @@ import { catalog, listProducts, getProduct, getStorefront, marketplaceData } fro
 import { payments } from "./payments/routes.ts";
 import { APP_CSS } from "./ssr/theme.ts";
 import { APP_JS } from "./ssr/app-js.ts";
-import { homePage, productPage, storePage } from "./ssr/pages.ts";
+import { cartPage, homePage, orderPage, productPage, sellerLandingPage, storePage } from "./ssr/pages.ts";
 import { accountPage, adminPage, storeDashboardPage } from "./ssr/account.ts";
 import { auth } from "./auth/routes.ts";
 import { currentUser } from "./auth/session.ts";
@@ -87,18 +87,40 @@ app.get("/set-city/:slug", (c) => {
   return c.body(null, 302, { "Set-Cookie": `mp_city=${encodeURIComponent(slug)}; Path=/; Max-Age=15552000; SameSite=Lax`, "Location": back });
 });
 
+app.get("/vender", (c) => c.html(sellerLandingPage()));
+app.get("/comercios", (c) => c.html(sellerLandingPage()));
+
+app.get("/carrito", async (c) => {
+  const mk = await marketplaceData(c.env);
+  return c.html(cartPage(mk.cities));
+});
+
+app.get("/pedido/:id", async (c) => {
+  const row = await c.env.DB.prepare(`SELECT doc FROM orders WHERE id=?`).bind(c.req.param("id")).first<{ doc: string }>();
+  if (!row) return c.html(notFound(), 404);
+  const ids = (c.req.query("ids") || c.req.param("id")).split(",").map((x) => x.trim()).filter(Boolean);
+  return c.html(orderPage(JSON.parse(row.doc), ids));
+});
+
 // Account, admin, store dashboard (render login/forbidden when unauthenticated).
 app.get("/cuenta", async (c) => {
   const u = await currentUser(c.env, c.req.header("Cookie"));
   let orders: any[] = [];
+  let profile: any = { addresses: [], fiscalProfiles: [] };
   if (u) {
-    const rows = await c.env.DB.prepare(`SELECT doc FROM orders ORDER BY created_at DESC LIMIT 200`).all<{ doc: string }>();
+    const [rows, profileRow] = await Promise.all([
+      c.env.DB.prepare(`SELECT doc FROM orders ORDER BY created_at DESC LIMIT 200`).all<{ doc: string }>(),
+      c.env.DB.prepare(`SELECT doc FROM user_profiles WHERE user_id=?`).bind(u.id).first<{ doc: string }>(),
+    ]);
     orders = (rows.results ?? []).map((r) => JSON.parse(r.doc)).filter((o) => o.userId === u.id).slice(0, 25);
+    if (profileRow) { try { profile = JSON.parse(profileRow.doc); } catch {} }
   }
-  return c.html(accountPage(u, orders));
+  return c.html(accountPage(u, orders, profile));
 });
 
-app.get("/admin", async (c) => {
+app.get("/admin", (c) => c.redirect("/comercios", 302));
+
+app.get("/comercios/portal", async (c) => {
   const u = await currentUser(c.env, c.req.header("Cookie"));
   if (!u || u.role !== "admin") return c.html(adminPage(u, { stores: [], products: [], orders: [], stats: {} }));
   const [stores, products, orders, counts] = await Promise.all([
@@ -149,7 +171,9 @@ app.use("*", async (c, next) => {
   const user = await currentUser(c.env, c.req.header("Cookie"));
   if (user?.role === "admin") return next();
   if (user?.role === "store" && c.req.method === "POST" &&
-      (path === "/catalog/offers" || path === "/catalog/products")) return next();
+      (path === "/catalog/offers" || path === "/catalog/products" ||
+       /^\/catalog\/orders\/[^/]+\/fulfillment$/.test(path) ||
+       /^\/catalog\/sellers\/[^/]+\/payment-methods$/.test(path))) return next();
 
   return c.json({ error: "unauthorized" }, 401, { "WWW-Authenticate": 'Basic realm="salesfactory"' });
 });
@@ -198,6 +222,7 @@ function isPublic(method: string, path: string): boolean {
   // payment, write a product review. NOT mark-paid (back-office/webhook).
   if (method === "POST") {
     if (path === "/catalog/orders") return true;
+    if (path === "/catalog/checkout") return true;
     if (/^\/catalog\/products\/[^/]+\/reviews$/.test(path)) return true;
     if (path === "/payments/payment_intents") return true;
     if (/^\/payments\/payment_intents\/[^/]+\/(confirm|cancel)$/.test(path)) return true;
@@ -209,6 +234,7 @@ function isPublic(method: string, path: string): boolean {
   if (path === "/catalog/marketplace" || path === "/catalog/products") return true;
   if (/^\/catalog\/products\/[^/]+$/.test(path)) return true;        // GET /catalog/products/{slug}
   if (/^\/catalog\/sellers\/[^/]+$/.test(path)) return true;        // GET /catalog/sellers/{handle}
+  if (/^\/catalog\/sellers\/by-id\/[^/]+\/payment-methods$/.test(path)) return true;
   if (/^\/catalog\/orders\/[^/]+$/.test(path)) return true;          // GET /catalog/orders/{id}
   if (/^\/payments\/payment_intents\/[^/]+$/.test(path)) return true; // GET /payments/payment_intents/{id}
   return false;

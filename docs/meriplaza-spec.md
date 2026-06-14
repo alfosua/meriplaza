@@ -79,7 +79,9 @@ view transitions + speculation-rules prefetch.
   dual currency, **multi-store offer comparison** (cheapest highlighted), specs,
   shipping providers + ETA, delivery cities, trust badge, related products,
   sticky mobile add-to-cart, reviews + review form.
-- Unified **cart drawer** grouped by store; checkout creates one order per store.
+- Unified **cart drawer** and full `/carrito` page grouped by store; checkout
+  creates one order per store, confirms payment intents server-side, and emits
+  fiscal invoice metadata for successful payments.
 - Promotions: home banners, featured "Ofertas destacadas", sale badges.
 
 **Stores (sellers)**
@@ -88,10 +90,14 @@ view transitions + speculation-rules prefetch.
 - Shipping methods shown; store dashboard at `/tienda/panel`.
 
 **Accounts & portals**
-- Customer / store / admin roles; signup, login, sessions.
-- **Admin portal** `/admin`: stats, recent orders, add product, add offer.
-- **Store dashboard** `/tienda/panel`: orders, publish offers, my offers.
-- Account `/cuenta`: profile, orders, payment methods.
+- Customer / store / operator roles; signup, login, sessions.
+- **Merchant onboarding** `/comercios` and hidden legacy `/admin` redirect.
+- **Merchant/operator portal** `/comercios/portal`: stats, recent orders, add
+  product, add offer.
+- **Store dashboard** `/tienda/panel`: orders, shipment updates, checkout payment
+  instructions, publish offers, my offers.
+- Account `/cuenta`: saved delivery address, fiscal profile, orders, payment
+  methods.
 
 **Payments & money**
 - Methods: PagoMóvil, transferencia, divisas, punto de venta, card (US/Panamá),
@@ -112,7 +118,9 @@ view transitions + speculation-rules prefetch.
 | `GET /p/:slug` | Product detail |
 | `GET /t/:handle` | Store storefront |
 | `GET /cuenta` | Account / login + register |
-| `GET /admin` | Admin portal (admin role) |
+| `GET /comercios` | Merchant onboarding landing page |
+| `GET /comercios/portal` | Merchant/operator portal (operator role) |
+| `GET /admin` | Legacy redirect to `/comercios` |
 | `GET /tienda/panel` | Store dashboard (store role) |
 | `GET /set-city/:slug` | Persist delivery city |
 | `GET /catalog/*`, `POST /catalog/*` | JSON API (products, offers, sellers, orders, reviews, promotions, cities) |
@@ -120,24 +128,25 @@ view transitions + speculation-rules prefetch.
 | `GET /assets/app.css`, `/assets/app.js` | Static assets |
 
 **Auth model:** browsing + placing orders + paying + reviews are public
-(Stripe-publishable-key style). Store/catalog management requires an admin/store
-session or HTTP Basic Auth.
+(Stripe-publishable-key style). Store/catalog management requires an
+operator/store session or HTTP Basic Auth.
 
 ## 7. Demo data
 
-9 stores (incl. Traki with ~200 products, Samsung, Farmatodo, Santo Tomé,
-Miyake, plus independents), 222 products, 244 offers, 8 cities, reviews, and
-promo banners. Seeded via `edge/scripts/seed-v3.mjs`; images sourced via
-`edge/scripts/fetch-images.mjs` (Wikimedia) → `images.json`.
+14 stores (incl. Traki with ~200 products, Samsung, Farmatodo, Locatel, EPA,
+Beco, Santo Tomé, Miyake, plus independents), ~637 products, hundreds of offers,
+8 cities, reviews, and promo banners. Seeded via `edge/scripts/seed-v3.mjs`;
+images sourced via `edge/scripts/fetch-images.mjs` (Wikimedia) → `images.json`
+with category image pools for generated catalog rows.
 
-Demo logins: admin `admin@meriplaza.ve` / `admin1234`.
+Demo logins: operator `admin@meriplaza.ve` / `admin1234`.
 
 ## 8. Known gaps / next steps
 
 - BCV live rate scraping is best-effort; rate is a KV value with a fallback.
 - Search API paginates at ~60 results (store pages show all); no infinite scroll.
-- SSR checkout creates the order but doesn't yet drive payment-intent confirm
-  end-to-end, nor auto-emit the fiscal invoice.
+- Live payment processors are simulated in the edge demo; production bank/crypto
+  settlement adapters still need real provider credentials/webhooks.
 - Some product images are imperfect category matches.
 - No email verification / password reset; sessions aren't rotated.
 

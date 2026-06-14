@@ -35,7 +35,7 @@ function header(o: HeaderOpts = {}): string {
       <button class="city-pill" data-open-city aria-label="Elegir ciudad">📍 <b>${esc(city)}</b></button>
       <div class="icons">
         <a class="iconbtn" href="/cuenta" aria-label="Cuenta">👤<span class="hide-sm" style="font-size:.85rem">Cuenta</span></a>
-        <button class="iconbtn" data-open-cart aria-label="Carrito">🛒<span class="cart-count" hidden>0</span></button>
+        <a class="iconbtn" href="/carrito" aria-label="Carrito">🛒<span class="cart-count" hidden>0</span></a>
       </div>
     </div>
   </header>
@@ -84,13 +84,202 @@ ${header(opts.header)}
     </div>
     <div><h4>Comprar</h4><ul><li><a href="/">Inicio</a></li><li><a href="/?category=Tecnología">Tecnología</a></li><li><a href="/?category=Alimentos">Alimentos</a></li><li><a href="/?category=Moda">Moda</a></li></ul></div>
     <div><h4>Cuenta</h4><ul><li><a href="/cuenta">Mi cuenta</a></li><li><a href="/cuenta">Mis pedidos</a></li><li><a href="/tienda/panel">Panel de tienda</a></li></ul></div>
-    <div><h4>SalesFactory</h4><ul><li><a href="/quickpago">QuickPago</a></li><li><a href="/admin">Portal admin</a></li><li><a href="#">Vender en Meriplaza</a></li></ul></div>
+    <div><h4>SalesFactory</h4><ul><li><a href="/quickpago">QuickPago</a></li><li><a href="/comercios">Vender en Meriplaza</a></li><li><a href="/comercios/portal">Portal de comercios</a></li></ul></div>
   </div>
   <div class="muted" style="color:#6b7280;border-top:1px solid #1f2330;margin-top:1.5rem;padding-top:1rem;font-size:.78rem">© 2026 Meriplaza · un producto de SalesFactory · Hecho en Venezuela 🇻🇪</div>
 </div></footer>
 <script type="speculationrules">{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":"/quickpago/api/*"}},{"not":{"selector_matches":"[data-add],[data-open-cart]"}}]},"eagerness":"moderate"}]}</script>
 <script src="/assets/app.js" defer></script>
 </body></html>`;
+}
+
+export function sellerLandingPage(): string {
+  const body = `
+  <section class="hero">
+    <div class="container hero__grid">
+      <div>
+        <span class="eyebrow">Para comercios venezolanos</span>
+        <h1>Abre tu tienda en Meriplaza</h1>
+        <p>Publica productos, recibe pedidos por ciudad, cobra con SalesFactory y entrega con tus métodos locales.</p>
+        <div class="hero__actions">
+          <a class="btn btn--accent" href="/cuenta">Crear cuenta de tienda</a>
+          <a class="btn btn--ghost" href="/quickpago">Conocer QuickPago</a>
+        </div>
+      </div>
+      <div class="seller-demo" aria-label="Resumen de comercio">
+        <div class="spark">✦</div>
+        <h3>Portal de comercios</h3>
+        <div class="metric"><span>Pedidos hoy</span><b>24</b></div>
+        <div class="metric"><span>Facturas IVA</span><b>100%</b></div>
+        <div class="metric"><span>Cobros confirmados</span><b>Bs · $ · USDT</b></div>
+      </div>
+    </div>
+  </section>
+  <section class="container">
+    <div class="section-head"><h2>Lo que recibe tu tienda</h2></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+      ${[
+        ["Catálogo multi-tienda","Tus ofertas compiten en un mercado central y también viven en tu storefront propio."],
+        ["Checkout con pago","Pedidos conectados a intents de pago, referencia bancaria y conciliación."],
+        ["Factura fiscal","IVA, RIF/CI del comprador, datos del comercio e invoice metadata en cada orden pagada."],
+        ["Envíos locales","Direcciones, ciudad, método de despacho y estado de shipment por pedido."]
+      ].map(([h,p])=>`<article class="card" style="padding:1.1rem"><h3 style="margin-top:0">${esc(h)}</h3><p class="muted">${esc(p)}</p></article>`).join("")}
+    </div>
+  </section>
+  <style>
+    .hero__grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr);gap:1.5rem;align-items:center;padding:clamp(2rem,6vw,4rem) clamp(1rem,4vw,2rem)}
+    .eyebrow{display:inline-flex;margin-bottom:.7rem;color:var(--blue);font-weight:750;font-size:.82rem}
+    .hero__actions{display:flex;gap:.65rem;flex-wrap:wrap}
+    .seller-demo{position:relative;background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid var(--line);border-radius:18px;padding:1.2rem;box-shadow:var(--shadow-2);animation:floaty 5s ease-in-out infinite}
+    .spark{position:absolute;right:1rem;top:.8rem;color:var(--yellow-600);font-size:1.5rem}
+    .metric{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding:.8rem 0}.metric b{color:var(--blue)}
+    @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+    @media(max-width:760px){.hero__grid{grid-template-columns:1fr}.seller-demo{animation:none}}
+  </style>`;
+  return layout({ title: "Vender en Meriplaza — Portal de comercios", body, description: "Crea una tienda en Meriplaza, cobra con SalesFactory y gestiona pedidos, envíos y facturas fiscales.", canonical: "https://salesfactory-edge.alfosuag.workers.dev/comercios" });
+}
+
+export function cartPage(cities: Array<{ slug: string; name: string; state: string }> = []): string {
+  const cityOptions = cities.length
+    ? cities.map((c) => `<option value="${esc(c.name)}">${esc(c.name)} · ${esc(c.state)}</option>`).join("")
+    : `<option>Caracas</option><option>Valencia</option><option>Maracaibo</option><option>Barquisimeto</option>`;
+  const body = `
+  <div class="container checkout-page">
+    <section class="checkout-head">
+      <div>
+        <span class="eyebrow">Checkout seguro</span>
+        <h1>Tu carrito</h1>
+        <p class="muted">Revisa productos, dirección, datos fiscales y pago antes de confirmar.</p>
+      </div>
+      <a class="btn btn--ghost" href="/">Seguir comprando</a>
+    </section>
+
+    <section class="checkout-grid">
+      <div>
+        <div class="card checkout-card" data-cart-lines>
+          <div class="emptycart">
+            <h2>Tu carrito está vacío</h2>
+            <p class="muted">Agrega productos del mercado para continuar.</p>
+            <a class="btn btn--primary" href="/">Explorar productos</a>
+          </div>
+        </div>
+      </div>
+
+      <aside class="checkout-side">
+        <form id="checkout-form" class="card checkout-form">
+          <h2>Entrega y factura</h2>
+          <label>Nombre o razón social<input name="buyerName" autocomplete="name" required placeholder="Consumidor final"></label>
+          <label>RIF/CI<input name="buyerTaxId" autocomplete="off" placeholder="V-12345678 o J-12345678-9"></label>
+          <label>Correo para recibo<input name="buyerEmail" type="email" autocomplete="email" placeholder="correo@ejemplo.com"></label>
+          <div class="frow">
+            <label>Ciudad<select name="city">${cityOptions}</select></label>
+            <label>Método de envío<select name="shipmentMethod"><option value="delivery">Delivery local</option><option value="pickup">Retiro en tienda</option><option value="courier">Courier nacional</option></select></label>
+          </div>
+          <label>Dirección<textarea name="address1" rows="3" autocomplete="street-address" placeholder="Calle, edificio, referencia"></textarea></label>
+          <label>Notas de entrega<input name="shipmentNotes" placeholder="Horario, punto de referencia, teléfono alterno"></label>
+
+          <h2>Pago</h2>
+          <label>Método<select name="paymentMethod">
+            <option value="transferencia">Transferencia nacional</option>
+            <option value="pago_movil">Pago móvil</option>
+            <option value="divisas_cash">Divisas en efectivo</option>
+            <option value="punto_de_venta">Punto de venta</option>
+            <option value="crypto">Cripto</option>
+          </select></label>
+          <label>Referencia bancaria / comprobante<input name="bankReference" placeholder="000123456 o WEB-..."></label>
+          <div class="pay-instructions" data-payment-instructions></div>
+          <div class="checkout-total" data-cart-totals>Total: 0.00</div>
+          <button class="btn btn--accent btn--block" type="submit" data-checkout-submit>Confirmar pedido</button>
+          <p class="muted" data-checkout-msg></p>
+        </form>
+      </aside>
+    </section>
+  </div>`;
+  return layout({ title: "Carrito — Meriplaza", body, description: "Completa tu compra en Meriplaza con dirección, datos fiscales, IVA y pago." });
+}
+
+export function orderPage(order: any, relatedIds: string[] = []): string {
+  const invoice = order.invoice || {};
+  const buyer = invoice.buyer || {};
+  const merchant = order.merchant || invoice.merchant || {};
+  const ship = order.shipment || {};
+  const addr = order.shippingAddress || buyer.address || {};
+  const body = `
+  <div class="container receipt-page">
+    <section class="checkout-head">
+      <div>
+        <span class="eyebrow">Pedido confirmado</span>
+        <h1>Pedido ${esc(order.id?.slice(-8) || "")}</h1>
+        <p class="muted">Guarda este enlace para consultar pago, factura y entrega.</p>
+      </div>
+      <div class="row" style="flex-wrap:wrap"><a class="btn btn--ghost" href="/cuenta">Mis pedidos</a><a class="btn btn--primary" href="/">Seguir comprando</a></div>
+    </section>
+
+    ${relatedIds.length > 1 ? `<div class="receipt-switch card">${relatedIds.map((id) => `<a class="${id === order.id ? "on" : ""}" href="/pedido/${esc(id)}?ids=${esc(relatedIds.join(","))}">Pedido ${esc(id.slice(-6))}</a>`).join("")}</div>` : ""}
+
+    <section class="receipt-grid">
+      <article class="card receipt-card">
+        <h2>Estado</h2>
+        ${timeline(order)}
+      </article>
+      <article class="card receipt-card">
+        <h2>Pago</h2>
+        <div class="payline"><span>Método</span><b>${esc(order.payment?.method || "")}</b></div>
+        <div class="payline"><span>Estado</span><b>${esc(paymentLabel(order.payment?.status || order.status))}</b></div>
+        <div class="payline"><span>Referencia</span><b>${esc(order.payment?.settlement?.reference || order.payment?.settlement?.networkTxn || "Pendiente")}</b></div>
+      </article>
+      <article class="card receipt-card">
+        <h2>Factura fiscal</h2>
+        <div class="payline"><span>Factura</span><b>${esc(order.invoiceId || invoice.id || "Pendiente")}</b></div>
+        <div class="payline"><span>Control</span><b>${esc(invoice.controlNumber || "Pendiente")}</b></div>
+        <div class="payline"><span>IVA</span><b>${esc(order.taxTotal || invoice.ivaAmount || "0.00")} ${esc(order.currency)}</b></div>
+        <div class="payline"><span>RIF/CI</span><b>${esc(order.buyerTaxId || buyer.taxId || "Consumidor final")}</b></div>
+      </article>
+      <article class="card receipt-card">
+        <h2>Entrega</h2>
+        <div class="payline"><span>Estado</span><b>${esc(shipmentLabel(ship.status || "pending"))}</b></div>
+        <div class="payline"><span>Ciudad</span><b>${esc(addr.city || ship.city || "")}</b></div>
+        <div class="payline"><span>Dirección</span><b>${esc(addr.address1 || "")}</b></div>
+        <div class="payline"><span>Tracking</span><b>${esc(ship.tracking || "Pendiente")}</b></div>
+      </article>
+    </section>
+
+    <section class="receipt-grid receipt-grid--wide">
+      <article class="card receipt-card">
+        <h2>Artículos</h2>
+        ${(order.lines || []).map((l: any) => `<div class="receipt-line"><span>${esc(l.title)} <small>x${esc(l.quantity)}</small></span><b>${esc(l.unitPrice)} ${esc(order.currency)}</b></div>`).join("")}
+        <div class="receipt-total"><span>Subtotal</span><b>${esc(order.subtotal)} ${esc(order.currency)}</b></div>
+        <div class="receipt-total"><span>IVA</span><b>${esc(order.taxTotal)} ${esc(order.currency)}</b></div>
+        <div class="receipt-total grand"><span>Total</span><b>${esc(order.grandTotal)} ${esc(order.currency)}</b></div>
+      </article>
+      <article class="card receipt-card">
+        <h2>Comercio</h2>
+        <div class="payline"><span>Tienda</span><b>${esc(merchant.name || "")}</b></div>
+        <div class="payline"><span>RIF</span><b>${esc(merchant.rif || "")}</b></div>
+        <div class="payline"><span>Merchant ID</span><b>${esc(merchant.merchantId || "")}</b></div>
+      </article>
+    </section>
+  </div>`;
+  return layout({ title: `Pedido ${order.id?.slice(-8) || ""} — Meriplaza`, body, description: "Confirmación de pedido, pago, factura fiscal y entrega en Meriplaza." });
+}
+
+function timeline(order: any): string {
+  const ship = order.shipment || {};
+  const steps = [
+    ["created", "Pedido creado", true],
+    ["paid", "Pago confirmado", ["paid", "invoiced", "fulfilled"].includes(order.status) || order.payment?.status === "succeeded"],
+    ["invoice", "Factura emitida", !!order.invoiceId],
+    ["preparing", "Preparando", ["preparing", "ready", "shipped", "delivered"].includes(ship.status)],
+    ["shipped", "En camino", ["shipped", "delivered"].includes(ship.status)],
+    ["delivered", "Entregado", ship.status === "delivered" || order.status === "fulfilled"],
+  ];
+  return `<ol class="receipt-timeline">${steps.map(([, label, done]) => `<li class="${done ? "done" : ""}"><span></span>${esc(label)}</li>`).join("")}</ol>`;
+}
+function paymentLabel(s: string): string {
+  return { succeeded: "Confirmado", requires_action: "Requiere acción", failed: "Fallido", pending_payment: "Pendiente", payment_action_required: "Requiere acción", payment_failed: "Fallido", invoiced: "Confirmado" }[s] || s || "Pendiente";
+}
+function shipmentLabel(s: string): string {
+  return { pending: "Pendiente", preparing: "Preparando", ready: "Listo para retirar", shipped: "En camino", delivered: "Entregado", canceled: "Cancelado" }[s] || s;
 }
 
 // ---- product card (shared by home + store + search) ----

@@ -94,8 +94,10 @@ the hardware). Ecommerce + payments run on the edge for the free-plan goal.
 
 - **Cloudflare Workers free plan (edge):** `edge/` — one Worker mounts
   `/catalog` + `/payments` on D1 + KV. `npm i && npm run migrate:remote &&
-  npm run deploy`. See `edge/wrangler.jsonc`. This is the target for the
-  ecommerce + payment-gateway free-plan requirement.
+  npm run deploy`. Run `npm run check` inside `edge/` before deploying; it
+  verifies Wrangler bindings, migrations, seed coverage, typecheck, and route
+  tests. See `edge/wrangler.jsonc`. This is the target for the ecommerce +
+  payment-gateway free-plan requirement.
 - **Single host / VPS (Go):** `deploy/docker-compose.yml` brings up Postgres +
   the three Go services + the static frontend. See `deploy/.env.example`.
 - **Cloudflare Containers (Go, Paid plan):** `deploy/cloudflare/` — a Worker

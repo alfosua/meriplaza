@@ -101,13 +101,138 @@ export function qpPortal(m: any, txns: any[]): string {
     <section>
       <h2 style="font-size:1.1rem">Transacciones</h2>
       <div class="card">${txns.length ? txns.map((t) => `<div class="spread" style="padding:.7rem 1rem;border-bottom:1px solid var(--line)">
-        <div><b>${esc(t.reference)}</b><div class="muted" style="font-size:.8rem">${esc(t.method)} · ${esc(t.created_at?.slice(0,16) || "")}</div></div>
-        <div class="row" style="gap:.75rem"><span class="price">${esc(t.amount)} ${esc(t.currency)}</span>
-        ${t.status === "pending" ? `<button class="btn btn--ghost" data-qp-confirm="${esc(t.id)}">Confirmar</button>` : `<span class="badge" style="background:var(--good);color:#fff">Confirmado</span>`}</div>
+        <div><b>${esc(t.reference)}</b><div class="muted" style="font-size:.8rem">${esc(t.method)} · ${esc(t.created_at?.slice(0,16) || "")}</div>
+          <a class="link" href="/quickpago/c/${esc(t.reference)}" target="_blank" rel="noopener">Link de cobro</a>${payerText(t.payer)}
+        </div>
+        <div class="row" style="gap:.75rem;flex-wrap:wrap"><span class="price">${esc(t.amount)} ${esc(t.currency)}</span>
+        ${qpStatusBadge(t.status)}${qpActions(t)}</div>
       </div>`).join("") : `<p class="muted" style="padding:1rem">Aún no tienes cobros.</p>`}</div>
     </section>
   </div>`;
   return shell(`Portal QuickPago · ${m.business}`, body);
+}
+
+export function qpChargePage(data: { tx: any; merchant: any; origin: string }): string {
+  const tx = data.tx;
+  const merchant = data.merchant;
+  const methods = merchant.methods || {};
+  const url = `${data.origin}/quickpago/c/${encodeURIComponent(tx.reference)}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url)}`;
+  const instructions = methodInstructions(tx.method, methods);
+  const canReport = tx.status === "pending";
+  const body = `
+  <div class="container" style="max-width:980px">
+    <section class="qp-pay">
+      <div>
+        <span class="badge" style="background:#d6f7ec;color:var(--qp-700)">Cobro QuickPago</span> ${qpStatusBadge(tx.status)}
+        <h1 style="font-size:clamp(2rem,6vw,3.2rem);margin:.7rem 0 .4rem">Pagar ${esc(tx.amount)} ${esc(tx.currency)}</h1>
+        <p class="muted">A ${esc(merchant.business)}${merchant.rif ? " · " + esc(merchant.rif) : ""}</p>
+        <div class="qp-ref">${esc(tx.reference)}</div>
+        <div class="row" style="flex-wrap:wrap;margin-top:1rem">
+          <a class="btn btn--qp" href="https://wa.me/?text=${encodeURIComponent(`Pago QuickPago ${tx.reference}: ${url}`)}">Compartir por WhatsApp</a>
+          <button class="btn btn--ghost" data-copy="${esc(url)}">Copiar link</button>
+        </div>
+      </div>
+      <div class="qp-qr card">
+        <img src="${qrUrl}" alt="QR de pago ${esc(tx.reference)}" width="220" height="220">
+        <small class="muted">Escanea para abrir este cobro</small>
+      </div>
+    </section>
+
+    <section class="qp-pay-grid">
+      <article class="qp-card">
+        <h2>Instrucciones de pago</h2>
+        ${instructions}
+      </article>
+      ${canReport ? `<form id="qp-pay-proof" class="qp-card" data-ref="${esc(tx.reference)}">
+        <h2>Reportar pago</h2>
+        <label>Nombre del pagador<input name="payerName" required placeholder="Nombre y apellido"></label>
+        <label>Teléfono o correo<input name="payerContact" placeholder="0414..."></label>
+        <label>Referencia / hash<input name="proof" required placeholder="Referencia bancaria o transacción"></label>
+        <button class="btn btn--qp btn--block" style="margin-top:.8rem" type="submit">Enviar comprobante</button>
+        <p class="muted" data-err></p>
+      </form>` : qpClosedCard(tx.status)}
+    </section>
+  </div>
+  <style>
+    .qp-pay{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:1.5rem;align-items:center;padding:2rem 0}
+    .qp-ref{display:inline-flex;margin-top:.6rem;padding:.45rem .75rem;border-radius:12px;background:#eef3ff;color:var(--ink);font-weight:900;letter-spacing:.08em}
+    .qp-qr{align-items:center;text-align:center;padding:1.2rem;content-visibility:visible}.qp-qr:hover{transform:none;box-shadow:none}
+    .qp-qr img{margin:auto;border-radius:14px}
+    .qp-pay-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding-top:0}
+    .qp-pay-grid h2{font-size:1.1rem;margin:.2rem 0 .7rem}
+    .payline{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding:.65rem 0}.payline b{text-align:right}
+    @media(max-width:760px){.qp-pay,.qp-pay-grid{grid-template-columns:1fr}.qp-qr{order:-1}}
+  </style>`;
+  return shell(`Pagar ${tx.reference} · QuickPago`, body);
+}
+
+function qpActions(t: any): string {
+  if (t.status !== "pending" && t.status !== "proof_submitted") return "";
+  return `<button class="btn btn--ghost" data-qp-confirm="${esc(t.id)}">Confirmar</button>
+    <button class="btn btn--ghost" data-qp-cancel="${esc(t.id)}">Cancelar</button>
+    <button class="btn btn--ghost" data-qp-expire="${esc(t.id)}">Expirar</button>`;
+}
+
+function qpClosedCard(status: string): string {
+  const copy: Record<string, string> = {
+    proof_submitted: "Comprobante enviado. El comercio revisará y confirmará el pago.",
+    confirmed: "Pago confirmado por el comercio.",
+    canceled: "Este cobro fue cancelado por el comercio.",
+    expired: "Este cobro expiró. Solicita un nuevo link al comercio.",
+  };
+  return `<article class="qp-card"><h2>Estado del cobro</h2><p class="muted">${esc(copy[status] || "Este cobro no está disponible para reportar pagos.")}</p></article>`;
+}
+
+function qpStatusBadge(status: string): string {
+  const labels: Record<string, string> = {
+    pending: "Pendiente",
+    proof_submitted: "Comprobante enviado",
+    confirmed: "Confirmado",
+    canceled: "Cancelado",
+    expired: "Expirado",
+  };
+  const colors: Record<string, string> = {
+    pending: "background:#eef3ff;color:#3152a3",
+    proof_submitted: "background:#fff4d7;color:#8a5a00",
+    confirmed: "background:var(--good);color:#fff",
+    canceled: "background:#ffe1db;color:#a83218",
+    expired: "background:#eceff3;color:#516072",
+  };
+  return `<span class="badge" style="${colors[status] || colors.pending}">${esc(labels[status] || status || "Pendiente")}</span>`;
+}
+
+function methodInstructions(method: string, methods: any): string {
+  if (method === "pagomovil") {
+    const m = methods.pagomovil || {};
+    return `<div class="payline"><span>Banco</span><b>${esc(m.bank || "Configurar")}</b></div>
+      <div class="payline"><span>Teléfono</span><b>${esc(m.phone || "Configurar")}</b></div>
+      <div class="payline"><span>CI/RIF</span><b>${esc(m.ci || "Configurar")}</b></div>
+      <p class="muted">Usa la referencia del banco para reportar el pago.</p>`;
+  }
+  if (method === "crypto") {
+    const m = methods.crypto || {};
+    return `<div class="payline"><span>Red</span><b>${esc(m.network || "TRON")}</b></div>
+      <div class="payline"><span>Activo</span><b>${esc(m.asset || "USDT")}</b></div>
+      <div class="payline"><span>Dirección</span><b style="word-break:break-all">${esc(m.address || "Configurar")}</b></div>
+      <p class="muted">Reporta el hash de la transacción al terminar.</p>`;
+  }
+  const m = methods.transfer || {};
+  return `<div class="payline"><span>Banco</span><b>${esc(m.bank || "Configurar")}</b></div>
+    <div class="payline"><span>Cuenta</span><b>${esc(m.account || "Configurar")}</b></div>
+    <div class="payline"><span>Titular</span><b>${esc(m.holder || "Configurar")}</b></div>
+    <p class="muted">Reporta la referencia bancaria al terminar.</p>`;
+}
+
+function payerText(raw: string): string {
+  if (!raw) return "";
+  try {
+    const p = JSON.parse(raw);
+    if (!p.proof) return "";
+    return `<div class="muted" style="font-size:.78rem">Comprobante: ${esc(p.proof)}${p.name ? " · " + esc(p.name) : ""}</div>`;
+  } catch {
+    return `<div class="muted" style="font-size:.78rem">Pagador: ${esc(raw)}</div>`;
+  }
 }
 
 function qpAuth(): string {

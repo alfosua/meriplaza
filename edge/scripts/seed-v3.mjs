@@ -55,6 +55,16 @@ const STORES = [
     theme:{primaryColor:"#7b2ff7",accentColor:"#ff5ca8",tagline:"Hecho a mano en Mérida",layout:"featured"}, cities:["merida"], shipping:ship.national },
   { handle:"mascotas-felices", name:"Mascotas Felices", kind:"store", currency:"VES",
     theme:{primaryColor:"#ea580c",accentColor:"#16a34a",tagline:"Todo para tu mejor amigo",layout:"grid"}, cities:["caracas","maracay"], shipping:ship.local },
+  { handle:"epa", name:"EPA Hogar", kind:"store", currency:"USD", logo:"epa.biz",
+    theme:{primaryColor:"#f58220",accentColor:"#005baa",tagline:"Soluciones para construir, reparar y decorar",layout:"grid"}, cities:["caracas","valencia","maracaibo","barquisimeto"], shipping:ship.national },
+  { handle:"locatel", name:"Locatel", kind:"store", currency:"VES", logo:"locatel.com.ve",
+    theme:{primaryColor:"#0066b3",accentColor:"#00a651",tagline:"Salud y bienestar cerca de ti",layout:"grid"}, cities:ALL_CITIES, shipping:ship.local },
+  { handle:"beco", name:"Beco", kind:"store", currency:"USD", logo:"beco.com.ve",
+    theme:{primaryColor:"#1f2937",accentColor:"#d4af37",tagline:"Moda, hogar y belleza",layout:"featured"}, cities:["caracas","valencia","maracaibo"], shipping:ship.national },
+  { handle:"libreria-tecnica", name:"Librería Técnica", kind:"store", currency:"USD",
+    theme:{primaryColor:"#2563eb",accentColor:"#f59e0b",tagline:"Libros, oficina y útiles escolares",layout:"grid"}, cities:["caracas","merida","valencia"], shipping:ship.national },
+  { handle:"mundo-repuesto", name:"Mundo Repuesto", kind:"store", currency:"USD",
+    theme:{primaryColor:"#111827",accentColor:"#ef4444",tagline:"Repuestos y accesorios para tu vehículo",layout:"grid"}, cities:["caracas","maracay","valencia","barquisimeto"], shipping:ship.national },
 ];
 
 // Shared catalog products (sold by one or more stores). offer: [handle,price,stock,compareAt?,promo?,featured?]
@@ -125,6 +135,58 @@ function trakiProducts(n) {
 }
 const TRAKI_BULK = trakiProducts(200);
 
+const IMAGE_POOLS = {
+  Alimentos: ["corn_flour","white_rice","milk_powder","cooking_oil","bread_baguette"],
+  Bebidas: ["ground_coffee"],
+  Salud: ["paracetamol","vitamin_c"],
+  "Cuidado personal": ["soap_bar","shampoo"],
+  Tecnología: ["bluetooth_earbuds","usb_charger","wireless_mouse","mechanical_keyboard","power_bank"],
+  Hogar: ["wicker_basket"],
+  Moda: ["tshirt","jeans","sneakers"],
+  Accesorios: ["necklace"],
+  Mascotas: ["dog_food","cat_toy"],
+};
+function pooledImage(category, i) {
+  const pool = IMAGE_POOLS[category] || [];
+  if (!pool.length) return [];
+  return img(pool[i % pool.length]);
+}
+function generatedCatalog(prefix, handle, category, brand, names, count, opts = {}) {
+  const out = [];
+  const adjectives = opts.adjectives || ["Clásico","Premium","Familiar","Compacto","Profesional","Eco","Plus","Select","Diario","Max"];
+  for (let i = 0; i < count; i++) {
+    const base = names[i % names.length];
+    const adj = adjectives[(i * 5) % adjectives.length];
+    const variant = 100 + ((i * 37) % 890);
+    const price = (opts.min + ((i * opts.step) % opts.spread) + ((i % 4) * 0.25)).toFixed(2);
+    const promo = i % 9 === 0;
+    out.push({
+      key: `${prefix}_${i}`,
+      title: `${base} ${adj} ${variant}`,
+      category,
+      brand,
+      desc: `${base} ${adj.toLowerCase()} de ${brand}, disponible con despacho local y factura fiscal.`,
+      specs: { SKU: `${prefix.toUpperCase()}-${variant}`, Presentación: opts.presentation || "Unidad" },
+      images: pooledImage(category, i),
+      offers: [[handle, price, 8 + (i % 55), promo ? (parseFloat(price) * 1.22).toFixed(2) : "", promo ? "Promo" : "", i % 17 === 0 ? 1 : 0]],
+    });
+  }
+  return out;
+}
+
+const EXTRA_BULK = [
+  ...generatedCatalog("farmatodo_salud", "farmatodo", "Salud", "Farmatodo", ["Ibuprofeno","Loratadina","Suero oral","Alcohol antiséptico","Curitas","Termómetro digital","Multivitamínico","Protector solar"], 45, { min: 8, step: 7, spread: 55, presentation: "Caja" }),
+  ...generatedCatalog("locatel_bienestar", "locatel", "Salud", "Locatel", ["Tensiómetro","Glucómetro","Vitamina D","Magnesio","Omega 3","Gel antibacterial","Mascarillas","Pastillero semanal"], 45, { min: 10, step: 9, spread: 75, presentation: "Unidad" }),
+  ...generatedCatalog("origen_despensa", "super-orinoco", "Alimentos", "Orinoco", ["Pasta corta","Azúcar refinada","Caraotas negras","Atún en lata","Salsa de tomate","Avena en hojuelas","Galletas saladas","Mayonesa"], 35, { min: 18, step: 6, spread: 80, presentation: "Paquete" }),
+  ...generatedCatalog("santotome_despensa", "santo-tome", "Alimentos", "Santo Tomé", ["Pan de sandwich","Queso blanco","Jamón ahumado","Mantequilla","Yogurt firme","Cereal familiar","Harina de trigo","Sal marina"], 35, { min: 20, step: 5, spread: 95, presentation: "Familiar" }),
+  ...generatedCatalog("epa_hogar", "epa", "Hogar", "EPA", ["Taladro inalámbrico","Pintura satinada","Bombillo LED","Regleta eléctrica","Caja organizadora","Set de destornilladores","Grifería","Cerradura"], 55, { min: 6, step: 11, spread: 140, presentation: "Unidad" }),
+  ...generatedCatalog("beco_moda", "beco", "Moda", "Beco", ["Camisa casual","Pantalón chino","Vestido midi","Blazer ligero","Zapatos formales","Bolso urbano","Pijama algodón","Set deportivo"], 45, { min: 12, step: 8, spread: 110, presentation: "Unidad" }),
+  ...generatedCatalog("libreria_oficina", "libreria-tecnica", "Accesorios", "Librería Técnica", ["Cuaderno anillado","Agenda ejecutiva","Marcadores","Resma carta","Calculadora","Carpeta archivadora","Mochila escolar","Libro técnico"], 45, { min: 3, step: 5, spread: 60, presentation: "Unidad" }),
+  ...generatedCatalog("mundo_repuesto", "mundo-repuesto", "Accesorios", "Mundo Repuesto", ["Filtro de aceite","Bujía iridium","Limpiaparabrisas","Aceite 20W50","Batería 12V","Cargador de batería","Forros de asiento","Compresor portátil"], 45, { min: 8, step: 10, spread: 130, presentation: "Unidad" }),
+  ...generatedCatalog("samsung_extra", "samsung", "Tecnología", "Samsung", ["Galaxy A","Galaxy Buds","Cargador rápido","SmartTag","Tablet Galaxy","Monitor LED","Barra de sonido","Smart TV"], 35, { min: 18, step: 17, spread: 260, presentation: "Unidad" }),
+  ...generatedCatalog("mascotas_extra", "mascotas-felices", "Mascotas", "PetCare", ["Shampoo para perros","Arena sanitaria","Correa reflectiva","Cama acolchada","Snacks dentales","Rascador para gato","Transportador","Comedero doble"], 30, { min: 15, step: 8, spread: 95, presentation: "Unidad" }),
+];
+
 const PROMOS = [
   { kind:"holiday", title:"Especial Navidad 🎄", subtitle:"Hasta 40% en regalos seleccionados", href:"/?category=Tecnología", color:"blue", sort:1 },
   { kind:"deal", title:"Ofertas del día", subtitle:"Precios que bajan, no la calidad", href:"/?category=Alimentos", color:"yellow", sort:2 },
@@ -168,6 +230,7 @@ async function seedProduct(p) {
 }
 for (const p of PRODUCTS) await seedProduct(p);
 for (const p of TRAKI_BULK) await seedProduct(p);
+for (const p of EXTRA_BULK) await seedProduct(p);
 
 // 3) Promotions
 for (const pr of PROMOS) await post("/catalog/promotions", pr);

@@ -66,3 +66,62 @@ auth.get("/me", async (c) => {
   if (!u) return c.json({ user: null });
   return c.json({ user: u });
 });
+
+auth.get("/profile", async (c) => {
+  const u = await currentUser(c.env, c.req.header("Cookie"));
+  if (!u) return c.json({ user: null, profile: null });
+  const profile = await loadProfile(c.env, u.id);
+  return c.json({ user: u, profile });
+});
+
+auth.post("/profile", async (c) => {
+  const u = await currentUser(c.env, c.req.header("Cookie"));
+  if (!u) return c.json({ error: "unauthorized" }, 401);
+  const b = await c.req.json().catch(() => ({}));
+  const profile = normalizeProfile(b);
+  await c.env.DB.prepare(
+    `INSERT INTO user_profiles (user_id, doc, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(user_id) DO UPDATE SET doc=excluded.doc, updated_at=datetime('now')`,
+  ).bind(u.id, JSON.stringify(profile)).run();
+  return c.json({ ok: true, profile });
+});
+
+async function loadProfile(env: Env, userId: string) {
+  const row = await env.DB.prepare(`SELECT doc FROM user_profiles WHERE user_id=?`).bind(userId).first<{ doc: string }>();
+  return row ? safeProfile(row.doc) : { addresses: [], fiscalProfiles: [] };
+}
+
+function safeProfile(s: string) {
+  try { return normalizeProfile(JSON.parse(s)); } catch { return { addresses: [], fiscalProfiles: [] }; }
+}
+
+function normalizeProfile(b: any) {
+  const addresses = Array.isArray(b.addresses) ? b.addresses.map((a: any, i: number) => ({
+    id: String(a.id || `addr_${i + 1}`).slice(0, 40),
+    label: String(a.label || "Principal").slice(0, 60),
+    recipient: String(a.recipient || "").slice(0, 100),
+    phone: String(a.phone || "").slice(0, 40),
+    city: String(a.city || "").slice(0, 80),
+    address1: String(a.address1 || "").slice(0, 240),
+    notes: String(a.notes || "").slice(0, 240),
+    isDefault: !!a.isDefault,
+  })).filter((a: any) => a.city || a.address1 || a.recipient).slice(0, 5) : [];
+  const fiscalProfiles = Array.isArray(b.fiscalProfiles) ? b.fiscalProfiles.map((f: any, i: number) => ({
+    id: String(f.id || `fiscal_${i + 1}`).slice(0, 40),
+    label: String(f.label || "Personal").slice(0, 60),
+    name: String(f.name || "").slice(0, 120),
+    taxId: String(f.taxId || "").slice(0, 40),
+    email: String(f.email || "").slice(0, 120),
+    fiscalAddress: String(f.fiscalAddress || "").slice(0, 240),
+    isDefault: !!f.isDefault,
+  })).filter((f: any) => f.name || f.taxId || f.email).slice(0, 5) : [];
+  markOneDefault(addresses);
+  markOneDefault(fiscalProfiles);
+  return { addresses, fiscalProfiles };
+}
+
+function markOneDefault(items: Array<{ isDefault: boolean }>) {
+  if (!items.length) return;
+  const first = items.findIndex((x) => x.isDefault);
+  items.forEach((x, i) => { x.isDefault = i === (first >= 0 ? first : 0); });
+}

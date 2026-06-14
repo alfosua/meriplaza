@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "check": "node scripts/check-edge.mjs",
     "test": "node --test 'test/*.test.ts'",
     "typecheck": "tsc --noEmit",
     "dev": "wrangler dev",
