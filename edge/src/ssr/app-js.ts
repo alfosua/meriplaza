@@ -266,7 +266,79 @@ document.addEventListener("click", async (e)=>{
   const cp=e.target.closest("[data-copy]"); if(cp){ try{ await navigator.clipboard.writeText(cp.dataset.copy); toast("Link copiado"); }catch{ toast(cp.dataset.copy); } }
 });
 
+// --- Home location picker (Google Maps Places, lazily loaded) ---
+function loadMaps(cb){
+  if(window.google&&window.google.maps){ cb(); return; }
+  const k=window.__MAPS_KEY; if(!k){ cb(); return; }
+  window.__mapsCb=(window.__mapsCb||[]); window.__mapsCb.push(cb);
+  if(window.__mapsLoading) return; window.__mapsLoading=true;
+  window.__mapsReady=function(){ (window.__mapsCb||[]).forEach(f=>f()); window.__mapsCb=[]; };
+  const s=document.createElement("script");
+  s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(k)+"&libraries=places&loading=async&callback=__mapsReady";
+  s.async=true; document.head.appendChild(s);
+}
+function setHomeCoords(f,lat,lng){
+  if(!isFinite(lat)||!isFinite(lng)) return;
+  f.elements.homeLat.value=lat.toFixed(6); f.elements.homeLng.value=lng.toFixed(6);
+  if(f.elements.homeCoords) f.elements.homeCoords.value=lat.toFixed(5)+", "+lng.toFixed(5);
+}
+function renderHomeMap(lat,lng){
+  const el=$("#home-map"); if(!el||!(window.google&&window.google.maps)) return;
+  el.hidden=false; const c={lat:lat,lng:lng};
+  const map=new google.maps.Map(el,{center:c,zoom:14,disableDefaultUI:true});
+  const mk=new google.maps.Marker({position:c,map:map,draggable:true});
+  mk.addListener("dragend",()=>{ const p=mk.getPosition(); setHomeCoords($("#home-form"),p.lat(),p.lng()); });
+}
+function initHome(){
+  const f=$("#home-form"); if(!f) return;
+  const geo=$("[data-use-geo]",f);
+  if(geo) geo.addEventListener("click",()=>{
+    if(!navigator.geolocation){ toast("Geolocalización no disponible"); return; }
+    geo.disabled=true;
+    navigator.geolocation.getCurrentPosition(pos=>{
+      setHomeCoords(f,pos.coords.latitude,pos.coords.longitude); renderHomeMap(pos.coords.latitude,pos.coords.longitude);
+      geo.disabled=false; toast("Ubicación detectada");
+    },()=>{ geo.disabled=false; toast("No se pudo obtener tu ubicación"); });
+  });
+  const cur=parseFloat(f.elements.homeLat.value), curLng=parseFloat(f.elements.homeLng.value);
+  loadMaps(()=>{
+    if(!(window.google&&window.google.maps&&window.google.maps.places)) return;
+    const search=$("#home-search");
+    if(search){
+      const ac=new google.maps.places.Autocomplete(search,{fields:["geometry","name","formatted_address"],componentRestrictions:{country:"ve"}});
+      ac.addListener("place_changed",()=>{ const p=ac.getPlace(); if(p.geometry&&p.geometry.location){
+        const lat=p.geometry.location.lat(),lng=p.geometry.location.lng();
+        setHomeCoords(f,lat,lng); f.elements.homeLabel.value=p.formatted_address||p.name||f.elements.homeLabel.value; renderHomeMap(lat,lng);
+      }});
+    }
+    if(isFinite(cur)&&isFinite(curLng)) renderHomeMap(cur,curLng);
+  });
+}
+
+document.addEventListener("submit", async (e)=>{
+  const f=e.target;
+  if(f.id==="home-form"){ e.preventDefault(); const d=formData(f);
+    let lat=parseFloat(d.homeLat), lng=parseFloat(d.homeLng);
+    if((!isFinite(lat)||!isFinite(lng))&&d.homeCoords){ const m=String(d.homeCoords).split(/[ ,]+/).map(Number); if(m.length>=2&&isFinite(m[0])&&isFinite(m[1])){ lat=m[0]; lng=m[1]; } }
+    const home={label:d.homeLabel||"",city:d.homeCity||""}; if(isFinite(lat)&&isFinite(lng)){ home.lat=lat; home.lng=lng; }
+    const el=f.querySelector("[data-err]");
+    const r=await postJSON(API+"/auth/profile",{home});
+    if(r.ok){
+      if(home.lat&&home.lng) setCookie("mp_home",JSON.stringify({lat:home.lat,lng:home.lng,label:home.label,city:home.city}));
+      if(el) el.textContent="Ubicación guardada. Verás supermercados cercanos."; toast("Ubicación guardada");
+      setTimeout(()=>location.href="/super",600);
+    } else { if(el) el.textContent=r.data.message||"Inicia sesión para guardar tu ubicación"; toast("No se pudo guardar"); }
+    return; }
+  if(f.dataset.productEdit){ e.preventDefault(); const d=formData(f);
+    const body={title:d.title,brand:d.brand,category:d.category,description:d.description,curated:!!(f.elements.curated&&f.elements.curated.checked)};
+    if(d.image) body.images=[d.image];
+    const r=await postJSON(API+"/catalog/products/"+encodeURIComponent(f.dataset.productEdit),body);
+    const el=f.querySelector("[data-err]"); if(el) el.textContent=r.ok?"Guardado ✓":(r.data.message||("Error "+r.status));
+    toast(r.ok?"Producto actualizado":"No se pudo guardar"); return; }
+});
+
 paint();
 prefillCheckoutProfile();
 renderPaymentInstructions();
+initHome();
 `;

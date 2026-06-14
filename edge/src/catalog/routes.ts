@@ -6,7 +6,8 @@
 
 import { Hono } from "hono";
 import type { Env } from "../lib/env.ts";
-import { newID, nowISO } from "../lib/env.ts";
+import { newID, nowISO, distanceKm } from "../lib/env.ts";
+import { resolveImage } from "../ssr/images.ts";
 import * as ident from "../lib/ident.ts";
 import { priceOrder, type ProductLike, type CartItem } from "../lib/pricing.ts";
 import { confirm, isKnownMethod, type Method } from "../payments/processors.ts";
@@ -28,7 +29,7 @@ export async function marketplaceData(env: Env): Promise<{ sellers: any[]; categ
      FROM sellers s ORDER BY s.created_at`,
   ).all<{ doc: string; offer_count: number }>();
   const cats = await env.DB.prepare(`SELECT slug, name, icon FROM categories ORDER BY sort, name`).all();
-  const cities = await env.DB.prepare(`SELECT slug, name, state FROM cities ORDER BY sort, name`).all();
+  const cities = await env.DB.prepare(`SELECT slug, name, state, lat, lng FROM cities ORDER BY sort, name`).all();
   const promos = await env.DB.prepare(`SELECT id, kind, title, subtitle, href, color FROM promotions WHERE active=1 ORDER BY sort`).all();
   return {
     sellers: (sellers.results ?? []).map((r) => {
@@ -47,6 +48,131 @@ catalog.get("/marketplace", async (c) => {
   const payload = json(await marketplaceData(c.env));
   await c.env.CACHE.put("marketplace", payload, { expirationTtl: 60 });
   return new Response(payload, { headers: { "content-type": "application/json", "x-cache": "MISS" } });
+});
+
+// ---------- supermarket mode (proximity + price comparison) ----------
+
+const GROCERY_CATEGORIES = ["Alimentos", "Bebidas", "Salud", "Cuidado personal", "Hogar", "Mascotas"];
+const CARACAS = { lat: 10.4806, lng: -66.9036 };
+
+export interface SupermarketOpts {
+  lat?: number; lng?: number; cityName?: string;
+  stores?: string[]; q?: string; category?: string; limit?: number;
+}
+
+/**
+ * Supermarket view: rank stores by how close their delivery coverage is to the
+ * customer's home point, then list grocery products with a price comparison
+ * across the selected (or all nearby) stores.
+ */
+export async function supermarketData(env: Env, opts: SupermarketOpts = {}) {
+  const cityRows = await env.DB.prepare(`SELECT slug, name, state, lat, lng FROM cities`).all<any>();
+  const cities = cityRows.results ?? [];
+
+  let lat = Number.isFinite(opts.lat as number) ? (opts.lat as number) : undefined;
+  let lng = Number.isFinite(opts.lng as number) ? (opts.lng as number) : undefined;
+  if ((lat == null || lng == null) && opts.cityName) {
+    const ct = cities.find((c) => c.name === opts.cityName);
+    if (ct && ct.lat) { lat = ct.lat; lng = ct.lng; }
+  }
+  if (lat == null || lng == null) { lat = CARACAS.lat; lng = CARACAS.lng; }
+
+  // Rank every store by the distance to its nearest covered city.
+  const sellerRows = await env.DB.prepare(`SELECT id, doc FROM sellers`).all<any>();
+  const cov = await env.DB.prepare(
+    `SELECT sc.seller_id AS seller_id, c.name AS city, c.lat AS lat, c.lng AS lng
+       FROM store_cities sc JOIN cities c ON c.slug = sc.city_slug WHERE c.lat <> 0`,
+  ).all<any>();
+  const coverage = new Map<string, any[]>();
+  for (const r of cov.results ?? []) {
+    if (!coverage.has(r.seller_id)) coverage.set(r.seller_id, []);
+    coverage.get(r.seller_id)!.push(r);
+  }
+  const distById = new Map<string, number>();
+  const stores = (sellerRows.results ?? []).map((r) => {
+    const doc = safeJson<any>(r.doc, {});
+    let dist = Infinity, nearest: string | null = null;
+    for (const c of coverage.get(r.id) ?? []) {
+      const d = distanceKm(lat!, lng!, c.lat, c.lng);
+      if (d < dist) { dist = d; nearest = c.city; }
+    }
+    if (Number.isFinite(dist)) distById.set(r.id, Math.round(dist));
+    return {
+      id: r.id, handle: doc.handle, name: doc.name, kind: doc.kind,
+      currency: doc.currency || "VES", theme: doc.theme || {},
+      nearestCity: nearest, distanceKm: Number.isFinite(dist) ? Math.round(dist) : null,
+    };
+  }).filter((s) => s.distanceKm != null).sort((a, b) => (a.distanceKm! - b.distanceKm!));
+
+  // Which sellers' offers feed the product comparison.
+  const selectedHandles = (opts.stores ?? []).filter(Boolean);
+  const sellersForProducts = selectedHandles.length
+    ? stores.filter((s) => selectedHandles.includes(s.handle))
+    : stores;
+  const sellerIds = sellersForProducts.map((s) => s.id);
+  if (!sellerIds.length) return { home: { lat, lng, cityName: opts.cityName || "" }, stores, products: [], categories: GROCERY_CATEGORIES };
+
+  const cats = opts.category && GROCERY_CATEGORIES.includes(opts.category) ? [opts.category] : GROCERY_CATEGORIES;
+  const catPh = cats.map(() => "?").join(",");
+  const selPh = sellerIds.map(() => "?").join(",");
+  const binds: unknown[] = [...cats, ...sellerIds];
+  let qClause = "";
+  if (opts.q) { qClause = " AND (lower(p.title) LIKE ? OR lower(p.brand) LIKE ?)"; const t = `%${opts.q.toLowerCase()}%`; binds.push(t, t); }
+
+  const rows = await env.DB.prepare(
+    `SELECT p.id, p.slug, p.title, p.category, p.brand, p.images, p.rating_avg, p.rating_count,
+            o.id AS offer_id, o.price, o.currency, o.stock, o.compare_at,
+            o.seller_id, json_extract(s.doc,'$.name') AS seller_name, s.handle AS seller_handle
+       FROM offers o
+       JOIN products p ON p.id = o.product_id
+       JOIN sellers s ON s.id = o.seller_id
+      WHERE o.active = 1 AND p.category IN (${catPh}) AND o.seller_id IN (${selPh})${qClause}
+      ORDER BY p.title, CAST(o.price AS REAL)`,
+  ).bind(...binds).all<any>();
+
+  const products = new Map<string, any>();
+  for (const r of rows.results ?? []) {
+    let p = products.get(r.id);
+    if (!p) {
+      p = {
+        id: r.id, slug: r.slug, title: r.title, category: r.category, brand: r.brand,
+        image: resolveImage(firstImage(r.images), r.title, r.category, r.slug),
+        rating: r.rating_avg, ratingCount: r.rating_count, offers: [],
+      };
+      products.set(r.id, p);
+    }
+    p.offers.push({
+      offerId: r.offer_id, sellerId: r.seller_id, sellerHandle: r.seller_handle,
+      sellerName: r.seller_name, price: r.price, currency: r.currency, stock: r.stock,
+      distanceKm: distById.get(r.seller_id) ?? null,
+    });
+  }
+  const list = [...products.values()].map((p) => {
+    const prices = p.offers.map((o: any) => parseFloat(o.price)).filter((n: number) => Number.isFinite(n));
+    const min = Math.min(...prices), max = Math.max(...prices);
+    const best = p.offers.find((o: any) => parseFloat(o.price) === min) || p.offers[0];
+    return {
+      ...p,
+      bestOffer: best,
+      minPrice: Number.isFinite(min) ? min.toFixed(2) : null,
+      maxPrice: Number.isFinite(max) ? max.toFixed(2) : null,
+      currency: best?.currency || "VES",
+      storeCount: p.offers.length,
+      savingsPct: max > min && max > 0 ? Math.round(((max - min) / max) * 100) : 0,
+    };
+  }).slice(0, Math.min(opts.limit ?? 80, 120));
+
+  return { home: { lat, lng, cityName: opts.cityName || "" }, stores, products: list, categories: GROCERY_CATEGORIES };
+}
+
+catalog.get("/supermarket", async (c) => {
+  const lat = parseFloat(c.req.query("lat") || ""), lng = parseFloat(c.req.query("lng") || "");
+  const stores = (c.req.query("stores") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const data = await supermarketData(c.env, {
+    lat: Number.isFinite(lat) ? lat : undefined, lng: Number.isFinite(lng) ? lng : undefined,
+    cityName: c.req.query("city") || "", stores, q: c.req.query("q") || "", category: c.req.query("category") || "",
+  });
+  return c.json(data);
 });
 
 // ---------- product listing / search ----------
@@ -71,7 +197,7 @@ export async function listProducts(env: Env, opts: { q?: string; category?: stri
     `(SELECT ${col} FROM offers o WHERE o.product_id = p.id AND o.active = 1 ORDER BY CAST(o.price AS REAL), o.id LIMIT 1)`;
 
   const rows = await env.DB.prepare(
-    `SELECT p.id, p.slug, p.title, p.category, p.brand, p.images, p.rating_avg, p.rating_count,
+    `SELECT p.id, p.slug, p.title, p.category, p.brand, p.images, p.description, p.curated, p.rating_avg, p.rating_count,
         (SELECT MIN(CAST(o.price AS REAL)) FROM offers o WHERE o.product_id = p.id AND o.active = 1) AS min_price,
         (SELECT COUNT(*) FROM offers o WHERE o.product_id = p.id AND o.active = 1) AS offer_count,
         ${best("o.currency")} AS currency,
@@ -92,7 +218,8 @@ export async function listProducts(env: Env, opts: { q?: string; category?: stri
     const discountPct = compare > price && price > 0 ? Math.round(((compare - price) / compare) * 100) : 0;
     return {
       id: r.id, slug: r.slug, title: r.title, category: r.category, brand: r.brand,
-      image: firstImage(r.images), rating: r.rating_avg, ratingCount: r.rating_count,
+      description: r.description || "", curated: !!r.curated,
+      image: resolveImage(firstImage(r.images), r.title, r.category, r.slug || r.id), rating: r.rating_avg, ratingCount: r.rating_count,
       minPrice: r.min_price != null ? r.min_price.toFixed(2) : null,
       compareAt: compare ? compare.toFixed(2) : null, discountPct, promo: r.best_promo || "",
       currency: r.currency || "VES", offerCount: r.offer_count,
@@ -130,9 +257,11 @@ export async function getProduct(env: Env, slug: string) {
     const cr = await env.DB.prepare(`SELECT c.name FROM store_cities sc JOIN cities c ON c.slug=sc.city_slug WHERE sc.seller_id=? ORDER BY c.sort`).bind(offers.results[0].seller_id).all<any>();
     cities = (cr.results ?? []).map((x) => x.name);
   }
+  const ownImages = safeJson<string[]>(p.images, []);
+  const images = ownImages.length ? ownImages : [resolveImage(null, p.title, p.category, p.slug)];
   return {
     id: p.id, slug: p.slug, title: p.title, category: p.category, brand: p.brand,
-    description: p.description, images: safeJson(p.images, []), specs: safeJson(p.specs, {}),
+    description: p.description, images, specs: safeJson(p.specs, {}),
     rating: p.rating_avg, ratingCount: p.rating_count, deliveryCities: cities,
     offers: (offers.results ?? []).map((o) => {
       const sd = safeJson<any>(o.seller_doc, {});
@@ -165,6 +294,30 @@ catalog.post("/products", async (c) => {
   ).bind(id, slug, b.title, b.category ?? "", b.brand ?? "", b.description ?? "", json(b.images ?? []), json(b.specs ?? {})).run();
   await c.env.CACHE.delete("marketplace");
   return c.json({ id, slug }, 201);
+});
+
+// Update a canonical product's content (superuser content management). Only the
+// provided fields are changed; `curated` flags well-known catalog items.
+catalog.post("/products/:id", async (c) => {
+  // The global auth gate already restricts writes to admin or Basic-auth callers.
+  const id = c.req.param("id");
+  const row = await c.env.DB.prepare(`SELECT * FROM products WHERE id = ?`).bind(id).first<any>();
+  if (!row) return c.json({ error: "not_found" }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const next = {
+    title: typeof b.title === "string" && b.title.trim() ? b.title.trim() : row.title,
+    category: typeof b.category === "string" ? b.category : row.category,
+    brand: typeof b.brand === "string" ? b.brand : row.brand,
+    description: typeof b.description === "string" ? b.description : row.description,
+    images: Array.isArray(b.images) ? json(b.images.filter((x: any) => typeof x === "string" && x.trim())) : row.images,
+    specs: b.specs && typeof b.specs === "object" ? json(b.specs) : row.specs,
+    curated: b.curated == null ? row.curated : (b.curated ? 1 : 0),
+  };
+  await c.env.DB.prepare(
+    `UPDATE products SET title=?, category=?, brand=?, description=?, images=?, specs=?, curated=? WHERE id=?`,
+  ).bind(next.title, next.category, next.brand, next.description, next.images, next.specs, next.curated, id).run();
+  await c.env.CACHE.delete("marketplace");
+  return c.json({ ok: true, id, ...next, images: safeJson(next.images, []) });
 });
 
 // Create/replace a seller's offer for a product (store/admin).
@@ -273,7 +426,7 @@ export async function getStorefront(env: Env, handle: string) {
   return {
     seller,
     products: (offers.results ?? []).map((o) => ({
-      offerId: o.id, slug: o.slug, title: o.title, image: firstImage(o.images), category: o.category,
+      offerId: o.id, slug: o.slug, title: o.title, image: resolveImage(firstImage(o.images), o.title, o.category, o.slug), category: o.category,
       price: o.price, currency: o.currency, stock: o.stock, rating: o.rating_avg, ratingCount: o.rating_count,
     })),
   };

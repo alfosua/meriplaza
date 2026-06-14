@@ -167,7 +167,10 @@ function generatedCatalog(prefix, handle, category, brand, names, count, opts = 
       brand,
       desc: `${base} ${adj.toLowerCase()} de ${brand}, disponible con despacho local y factura fiscal.`,
       specs: { SKU: `${prefix.toUpperCase()}-${variant}`, Presentación: opts.presentation || "Unidad" },
-      images: pooledImage(category, i),
+      // Leave images empty: the storefront derives a product-accurate, varied
+      // image from the title keyword at render time (see ssr/images.ts), instead
+      // of reusing one generic category photo for every generated item.
+      images: [],
       offers: [[handle, price, 8 + (i % 55), promo ? (parseFloat(price) * 1.22).toFixed(2) : "", promo ? "Promo" : "", i % 17 === 0 ? 1 : 0]],
     });
   }

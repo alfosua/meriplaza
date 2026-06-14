@@ -10,12 +10,13 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./lib/env.ts";
-import { catalog, listProducts, getProduct, getStorefront, marketplaceData } from "./catalog/routes.ts";
+import { catalog, listProducts, getProduct, getStorefront, marketplaceData, supermarketData } from "./catalog/routes.ts";
 import { payments } from "./payments/routes.ts";
 import { APP_CSS } from "./ssr/theme.ts";
 import { APP_JS } from "./ssr/app-js.ts";
 import { cartPage, homePage, orderPage, productPage, sellerLandingPage, storePage } from "./ssr/pages.ts";
-import { accountPage, adminPage, storeDashboardPage } from "./ssr/account.ts";
+import { accountPage, adminPage, storeDashboardPage, superAdminPage } from "./ssr/account.ts";
+import { supermarketPage } from "./ssr/supermarket.ts";
 import { auth } from "./auth/routes.ts";
 import { currentUser } from "./auth/session.ts";
 import { getRate, approxAlt } from "./lib/fx.ts";
@@ -115,7 +116,43 @@ app.get("/cuenta", async (c) => {
     orders = (rows.results ?? []).map((r) => JSON.parse(r.doc)).filter((o) => o.userId === u.id).slice(0, 25);
     if (profileRow) { try { profile = JSON.parse(profileRow.doc); } catch {} }
   }
-  return c.html(accountPage(u, orders, profile));
+  return c.html(accountPage(u, orders, profile, { mapsKey: c.env.GOOGLE_MAPS_API_KEY || "" }));
+});
+
+// Read the home-location cookie (JSON: {lat,lng,label,city}) set by the picker.
+function readHome(cookie: string | undefined): { lat?: number; lng?: number; label?: string; city?: string } {
+  const raw = readCookieVal(cookie, "mp_home");
+  if (!raw) return {};
+  try { const h = JSON.parse(raw); return { lat: Number(h.lat), lng: Number(h.lng), label: h.label, city: h.city }; }
+  catch { return {}; }
+}
+
+// Supermarket mode: nearby stores + grocery price comparison.
+app.get("/super", async (c) => {
+  const home = readHome(c.req.header("Cookie"));
+  const cityCookie = readCookieVal(c.req.header("Cookie"), "mp_city");
+  const stores = (c.req.query("stores") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const q = c.req.query("q") || "", category = c.req.query("category") || "";
+  const [mk, rate] = await Promise.all([marketplaceData(c.env), getRate(c.env)]);
+  const cityName = home.city || mk.cities.find((x: any) => x.slug === cityCookie)?.name || "";
+  const data = await supermarketData(c.env, {
+    lat: home.lat, lng: home.lng, cityName, stores, q, category,
+  });
+  return c.html(supermarketPage({
+    ...data, q, category, selectedStores: stores, rate,
+    cities: mk.cities, categories: mk.categories, cityName: cityName || data.home.cityName || "Caracas",
+    home, mapsKey: c.env.GOOGLE_MAPS_API_KEY || "",
+  }));
+});
+
+// Superuser content-management portal for well-known products.
+app.get("/super-admin", async (c) => {
+  const u = await currentUser(c.env, c.req.header("Cookie"));
+  if (!u || u.role !== "admin") return c.html(accountPage(u, [], { addresses: [], fiscalProfiles: [] }, { mapsKey: c.env.GOOGLE_MAPS_API_KEY || "" }));
+  const q = c.req.query("q") || "";
+  const curatedFirst = await listProducts(c.env, { q, limit: 60 });
+  const [mk] = await Promise.all([marketplaceData(c.env)]);
+  return c.html(superAdminPage(u, { products: curatedFirst, q, categories: mk.categories }));
 });
 
 app.get("/admin", (c) => c.redirect("/comercios", 302));
@@ -232,6 +269,7 @@ function isPublic(method: string, path: string): boolean {
   if (method !== "GET" && method !== "HEAD") return false;
   // Public reads: marketplace, product search/detail, storefront, order, intent.
   if (path === "/catalog/marketplace" || path === "/catalog/products") return true;
+  if (path === "/catalog/supermarket") return true;
   if (/^\/catalog\/products\/[^/]+$/.test(path)) return true;        // GET /catalog/products/{slug}
   if (/^\/catalog\/sellers\/[^/]+$/.test(path)) return true;        // GET /catalog/sellers/{handle}
   if (/^\/catalog\/sellers\/by-id\/[^/]+\/payment-methods$/.test(path)) return true;

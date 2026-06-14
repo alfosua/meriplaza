@@ -78,12 +78,27 @@ auth.post("/profile", async (c) => {
   const u = await currentUser(c.env, c.req.header("Cookie"));
   if (!u) return c.json({ error: "unauthorized" }, 401);
   const b = await c.req.json().catch(() => ({}));
-  const profile = normalizeProfile(b);
+  // Merge: only overwrite the sections present in the request so a partial save
+  // (e.g. just the home location) doesn't erase saved addresses/fiscal data.
+  const existing = await loadProfile(c.env, u.id);
+  const incoming = normalizeProfile(b);
+  const profile: any = { ...existing };
+  if (Array.isArray(b.addresses)) profile.addresses = incoming.addresses;
+  if (Array.isArray(b.fiscalProfiles)) profile.fiscalProfiles = incoming.fiscalProfiles;
+  if (b.home !== undefined) {
+    if (incoming.home) profile.home = incoming.home; else delete profile.home;
+  }
+  profile.addresses = profile.addresses || [];
+  profile.fiscalProfiles = profile.fiscalProfiles || [];
   await c.env.DB.prepare(
     `INSERT INTO user_profiles (user_id, doc, updated_at) VALUES (?, ?, datetime('now'))
      ON CONFLICT(user_id) DO UPDATE SET doc=excluded.doc, updated_at=datetime('now')`,
   ).bind(u.id, JSON.stringify(profile)).run();
-  return c.json({ ok: true, profile });
+  const headers: Record<string, string> = {};
+  if (profile.home) {
+    headers["Set-Cookie"] = `mp_home=${encodeURIComponent(JSON.stringify(profile.home))}; Path=/; Max-Age=15552000; SameSite=Lax`;
+  }
+  return c.json({ ok: true, profile }, 200, headers);
 });
 
 async function loadProfile(env: Env, userId: string) {
@@ -117,7 +132,17 @@ function normalizeProfile(b: any) {
   })).filter((f: any) => f.name || f.taxId || f.email).slice(0, 5) : [];
   markOneDefault(addresses);
   markOneDefault(fiscalProfiles);
-  return { addresses, fiscalProfiles };
+  const home = normalizeHome(b.home);
+  return { addresses, fiscalProfiles, ...(home ? { home } : {}) };
+}
+
+function normalizeHome(h: any) {
+  if (!h || typeof h !== "object") return null;
+  const lat = Number(h.lat), lng = Number(h.lng);
+  const label = String(h.label || "").slice(0, 160);
+  const city = String(h.city || "").slice(0, 80);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (!label && !city)) return null;
+  return { lat, lng, label, city };
 }
 
 function markOneDefault(items: Array<{ isDefault: boolean }>) {

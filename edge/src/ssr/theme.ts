@@ -259,4 +259,48 @@ footer.site .fbrand .brand-mark{width:28px;height:28px}
 .ship-item{display:flex;align-items:center;justify-content:space-between;gap:1rem;border:1px solid var(--line);border-radius:10px;padding:.55rem .8rem;font-size:.85rem}
 .ship-item .p{font-weight:600}.ship-item small{color:var(--ink-2)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto}}
+
+/* --- Home location picker --- */
+.home-map{height:240px;border-radius:14px;margin:.6rem 0;border:1px solid var(--line);overflow:hidden}
+
+/* --- Supermarket mode --- */
+.super-head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap;padding:1rem 0 .3rem}
+.super-head h1{margin:.2rem 0}
+.super-loc{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:.8rem 1rem;margin:.4rem 0 1rem}
+.super-loc.warn{border-color:var(--yellow-600);background:#fffaf0}
+.super-stores{display:flex;gap:.6rem;flex-wrap:wrap}
+.super-chip{display:flex;align-items:center;gap:.55rem;border:1px solid var(--line);border-radius:14px;padding:.55rem .8rem;background:#fff;color:inherit;min-width:170px}
+.super-chip:hover{border-color:var(--brand)}
+.super-chip.on{border-color:var(--brand);background:var(--brand-050)}
+.super-chip__dot{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--bg-soft);font-weight:800;color:var(--brand)}
+.super-chip.on .super-chip__dot{background:var(--brand);color:#fff}
+.super-chip b{display:block;font-size:.9rem}.super-chip small{display:block;color:var(--ink-2);font-size:.74rem}
+.super-search{display:flex;gap:.6rem;margin:.4rem 0 .8rem}
+.super-search input{flex:1;padding:.7rem .9rem;border:1px solid var(--line);border-radius:12px;font:inherit}
+.super-cats{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem}
+.super-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1rem}
+.super-card{display:flex;flex-direction:column;overflow:hidden;padding:0}
+.super-card:hover{transform:none}
+.super-thumb{position:relative;display:block;aspect-ratio:1.4/1;background:var(--bg-soft);overflow:hidden}
+.super-thumb img{width:100%;height:100%;object-fit:cover}
+.super-thumb .ph{position:absolute;inset:0;display:grid;place-items:center;font-size:2.6rem}
+.super-thumb .badge--sale{position:absolute;left:.5rem;top:.5rem}
+.super-body{padding:.8rem;display:flex;flex-direction:column;gap:.5rem}
+.super-body h3{font-size:.95rem;margin:0;line-height:1.25}
+.super-best b{font-size:1.15rem;color:var(--blue)}
+.cmp{display:grid;gap:.3rem;border-top:1px solid var(--line);padding-top:.5rem}
+.cmp-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:.5rem;font-size:.82rem}
+.cmp-row.best .cmp-price{font-weight:800;color:var(--good)}
+.cmp-store small{color:var(--ink-2)}
+.cmp-row .add{width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:800;line-height:1}
+.cmp-row .add:disabled{opacity:.4;cursor:not-allowed}
+
+/* --- Superuser CMS --- */
+.cms-list{display:grid;gap:1rem;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.cms-card{padding:1rem;display:flex;flex-direction:column;gap:.2rem}
+.cms-card:hover{transform:none;box-shadow:var(--shadow-1)}
+.cms-head{display:flex;gap:.8rem;align-items:center;margin-bottom:.4rem}
+.cms-thumb{width:64px;height:64px;border-radius:12px;object-fit:cover;background:var(--bg-soft);flex:0 0 auto}
+.cms-curated{display:flex;align-items:center;gap:.4rem;font-size:.82rem;margin-top:.3rem}
+.cms-curated input{width:auto}
 `;

@@ -34,6 +34,7 @@ function header(o: HeaderOpts = {}): string {
       </form>
       <button class="city-pill" data-open-city aria-label="Elegir ciudad">📍 <b>${esc(city)}</b></button>
       <div class="icons">
+        <a class="iconbtn" href="/super" aria-label="Supermercado">🛒<span class="hide-sm" style="font-size:.85rem">Super</span></a>
         <a class="iconbtn" href="/cuenta" aria-label="Cuenta">👤<span class="hide-sm" style="font-size:.85rem">Cuenta</span></a>
         <a class="iconbtn" href="/carrito" aria-label="Carrito">🛒<span class="cart-count" hidden>0</span></a>
       </div>
@@ -82,7 +83,7 @@ ${header(opts.header)}
       <div class="fbrand"><span class="brand-mark">${MARK_SVG}</span><b style="color:#fff;font-size:1.1rem">Meriplaza</b></div>
       <p class="muted" style="color:#9aa4b2;margin:.2rem 0 0;max-width:30ch">El mercado de Venezuela. Muchas tiendas, un solo lugar. Paga en bolívares, divisas o cripto.</p>
     </div>
-    <div><h4>Comprar</h4><ul><li><a href="/">Inicio</a></li><li><a href="/?category=Tecnología">Tecnología</a></li><li><a href="/?category=Alimentos">Alimentos</a></li><li><a href="/?category=Moda">Moda</a></li></ul></div>
+    <div><h4>Comprar</h4><ul><li><a href="/">Inicio</a></li><li><a href="/super">Supermercado</a></li><li><a href="/?category=Tecnología">Tecnología</a></li><li><a href="/?category=Alimentos">Alimentos</a></li><li><a href="/?category=Moda">Moda</a></li></ul></div>
     <div><h4>Cuenta</h4><ul><li><a href="/cuenta">Mi cuenta</a></li><li><a href="/cuenta">Mis pedidos</a></li><li><a href="/tienda/panel">Panel de tienda</a></li></ul></div>
     <div><h4>SalesFactory</h4><ul><li><a href="/quickpago">QuickPago</a></li><li><a href="/comercios">Vender en Meriplaza</a></li><li><a href="/comercios/portal">Portal de comercios</a></li></ul></div>
   </div>

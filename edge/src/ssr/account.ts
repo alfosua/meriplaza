@@ -4,10 +4,11 @@ import { layout, esc } from "./pages.ts";
 const money = (n: number) => n.toFixed(2);
 
 // ---- customer / visitor account ----
-export function accountPage(user: any, orders: any[], profile: any = { addresses: [], fiscalProfiles: [] }): string {
+export function accountPage(user: any, orders: any[], profile: any = { addresses: [], fiscalProfiles: [] }, opts: { mapsKey?: string } = {}): string {
   if (!user) return loginPage();
   const addr = (profile.addresses || []).find((a: any) => a.isDefault) || profile.addresses?.[0] || {};
   const fiscal = (profile.fiscalProfiles || []).find((f: any) => f.isDefault) || profile.fiscalProfiles?.[0] || {};
+  const home = profile.home || {};
   const body = `
   <div class="container" style="max-width:780px">
     <section>
@@ -21,6 +22,35 @@ export function accountPage(user: any, orders: any[], profile: any = { addresses
         ${user.role === "store" ? `<a class="btn btn--primary" href="/tienda/panel">Panel de tienda</a>` : ""}
         </div>
       </div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>Mi ubicación</h2><a class="btn btn--ghost" href="/super">Ir a Supermercado</a></div>
+      <form id="home-form" class="card adminform" style="padding:1.2rem">
+        <p class="muted" style="margin:.1rem 0 .8rem">Define dónde estás para ver supermercados cercanos y comparar precios por proximidad.</p>
+        <label>Dirección o lugar
+          <input id="home-search" name="homeLabel" value="${esc(home.label || "")}" placeholder="Escribe tu dirección, urbanización o punto de referencia">
+        </label>
+        <div id="home-map" class="home-map" hidden></div>
+        <div class="frow">
+          <label>Ciudad
+            <select name="homeCity">
+              <option value="">Selecciona tu ciudad</option>
+              ${["Caracas","Maracaibo","Valencia","Barquisimeto","Maracay","Puerto Ordaz","Mérida","Maturín"].map((cn) => `<option value="${cn}" ${home.city === cn ? "selected" : ""}>${cn}</option>`).join("")}
+            </select>
+          </label>
+          <label>Coordenadas
+            <input name="homeCoords" value="${home.lat ? `${home.lat}, ${home.lng}` : ""}" placeholder="Lat, Lng (automático con el mapa)">
+          </label>
+        </div>
+        <input type="hidden" name="homeLat" value="${esc(home.lat || "")}">
+        <input type="hidden" name="homeLng" value="${esc(home.lng || "")}">
+        <div class="row" style="gap:.6rem;margin-top:.8rem">
+          <button class="btn btn--primary" type="submit">Guardar ubicación</button>
+          <button class="btn btn--ghost" type="button" data-use-geo>📍 Usar mi ubicación actual</button>
+        </div>
+        <p class="muted" data-err style="margin:.6rem 0 0"></p>
+      </form>
     </section>
 
     <section>
@@ -68,7 +98,8 @@ export function accountPage(user: any, orders: any[], profile: any = { addresses
       </div>
     </section>
   </div>
-  ${adminFormStyles()}`;
+  ${adminFormStyles()}
+  ${mapsLoader(opts.mapsKey)}`;
   return layout({ title: "Mi cuenta — Meriplaza", body });
 }
 
@@ -308,4 +339,57 @@ function shipmentLabel(s: string) {
 function adminFormStyles() {
   return `<style>.adminform label{display:block;font-size:.85rem;color:var(--ink-2);margin-top:.5rem}.adminform input,.adminform select,.adminform textarea{width:100%;padding:.55rem .7rem;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:.25rem}.frow{display:flex;gap:1rem;flex-wrap:wrap}.frow>label{flex:1;min-width:160px}.account-order{display:flex;justify-content:space-between;gap:1rem;padding:.9rem 1rem;border-bottom:1px solid var(--line);color:inherit}.account-order:hover{background:var(--bg-soft)}.account-order__title{font-weight:700}.account-order__meta{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.45rem}.account-order__meta span{font-size:.74rem;color:var(--ink-2);background:var(--bg-soft);border-radius:var(--pill);padding:.22rem .5rem}.account-order__total{text-align:right;display:grid;gap:.25rem;justify-items:end}.account-order__total small{color:var(--blue);font-weight:700}.fulfillment-list{display:grid;gap:1rem}.fulfill-card{padding:1rem;content-visibility:visible;contain-intrinsic-size:auto}.fulfill-card:hover{transform:none;box-shadow:none}.fulfill-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin:.9rem 0;padding:.8rem;border-radius:14px;background:var(--bg-soft)}.fulfill-details b,.fulfill-details span,.fulfill-details small{display:block}.fulfill-details b{font-size:.75rem;color:var(--ink-2);text-transform:uppercase;letter-spacing:.04em}.fulfill-details small{color:var(--ink-2);font-size:.78rem;margin-top:.12rem}.fulfill-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.7rem;align-items:end}.fulfill-form label{font-size:.8rem;color:var(--ink-2);font-weight:600}.fulfill-form input,.fulfill-form select{width:100%;padding:.55rem .7rem;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:.25rem}@media(max-width:640px){.account-order{display:grid}.account-order__total{text-align:left;justify-items:start}}</style>`;
 }
+// Expose the Maps key to app.js, which lazily loads the Places library only on
+// pages that have a location picker. Empty key → manual entry fallback.
+function mapsLoader(key?: string): string {
+  return `<script>window.__MAPS_KEY=${JSON.stringify(key || "")}</script>`;
+}
+
+// ---- superuser content management portal ----
+export function superAdminPage(user: any, data: { products: any[]; q: string; categories: any[] }): string {
+  if (!user || user.role !== "admin") return forbidden("Necesitas una cuenta de superusuario.");
+  const cats = (data.categories || []).map((c: any) => c.name);
+  const body = `
+  <div class="container">
+    <section>
+      <div class="section-head"><h2>Contenido · Productos conocidos</h2><button class="btn btn--ghost" data-logout>Salir</button></div>
+      <p class="muted" style="margin:.1rem 0 1rem">Edita la ficha de productos del catálogo: título, marca, categoría, descripción e imágenes. Marca los más conocidos como <b>destacados</b>.</p>
+      <form class="card adminform" style="padding:1rem 1.2rem" method="get" action="/super-admin">
+        <div class="frow">
+          <label>Buscar producto<input name="q" value="${esc(data.q)}" placeholder="Nombre o marca"></label>
+          <label style="flex:0 0 auto;align-self:end"><button class="btn btn--primary" type="submit">Buscar</button></label>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <div class="cms-list">
+        ${data.products.length ? data.products.map((p) => cmsRow(p, cats)).join("") : `<p class="muted">Sin resultados.</p>`}
+      </div>
+    </section>
+  </div>
+  ${adminFormStyles()}`;
+  return layout({ title: "Contenido — Meriplaza", body });
+}
+
+function cmsRow(p: any, cats: string[]): string {
+  return `<form class="card cms-card" data-product-edit="${esc(p.id)}">
+    <div class="cms-head">
+      <img class="cms-thumb" src="${esc(p.image || "")}" alt="" loading="lazy" decoding="async">
+      <div style="flex:1">
+        <div class="muted" style="font-size:.78rem">${esc(p.slug)} · ${esc(p.offerCount || 0)} oferta(s)${p.minPrice ? ` · desde ${esc(p.minPrice)} ${esc(p.currency)}` : ""}</div>
+        <label class="cms-curated"><input type="checkbox" name="curated" ${p.curated ? "checked" : ""}> Producto conocido (destacado)</label>
+      </div>
+    </div>
+    <div class="frow">
+      <label>Título<input name="title" value="${esc(p.title)}" required></label>
+      <label>Marca<input name="brand" value="${esc(p.brand || "")}"></label>
+      <label>Categoría<select name="category">${cats.map((c) => `<option ${p.category === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+    </div>
+    <label>URL de imagen<input name="image" value="${esc(p.image || "")}" placeholder="https://…"></label>
+    <label>Descripción<textarea name="description" rows="2">${esc(p.description || "")}</textarea></label>
+    <div class="row" style="gap:.6rem;margin-top:.6rem"><button class="btn btn--primary" type="submit">Guardar</button><span class="muted" data-err></span></div>
+  </form>`;
+}
+
 export { money };
