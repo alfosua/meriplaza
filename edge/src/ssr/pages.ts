@@ -226,11 +226,11 @@ export function orderPage(order: any, relatedIds: string[] = []): string {
         <h2>Pago</h2>
         <div class="payline"><span>Método</span><b>${esc(order.payment?.method || "")}</b></div>
         <div class="payline"><span>Estado</span><b>${esc(paymentLabel(order.payment?.status || order.status))}</b></div>
-        <div class="payline"><span>Referencia</span><b>${esc(order.payment?.settlement?.reference || order.payment?.settlement?.networkTxn || "Pendiente")}</b></div>
+        <div class="payline payline--id"><span>Referencia</span><b>${esc(order.payment?.settlement?.reference || order.payment?.settlement?.networkTxn || "Pendiente")}</b></div>
       </article>
       <article class="card receipt-card">
         <h2>Factura fiscal</h2>
-        <div class="payline"><span>Factura</span><b>${esc(order.invoiceId || invoice.id || "Pendiente")}</b></div>
+        <div class="payline payline--id"><span>Factura</span><b>${esc(order.invoiceId || invoice.id || "Pendiente")}</b></div>
         <div class="payline"><span>Control</span><b>${esc(invoice.controlNumber || "Pendiente")}</b></div>
         <div class="payline"><span>IVA</span><b>${esc(order.taxTotal || invoice.ivaAmount || "0.00")} ${esc(order.currency)}</b></div>
         <div class="payline"><span>RIF/CI</span><b>${esc(order.buyerTaxId || buyer.taxId || "Consumidor final")}</b></div>
@@ -256,7 +256,7 @@ export function orderPage(order: any, relatedIds: string[] = []): string {
         <h2>Comercio</h2>
         <div class="payline"><span>Tienda</span><b>${esc(merchant.name || "")}</b></div>
         <div class="payline"><span>RIF</span><b>${esc(merchant.rif || "")}</b></div>
-        <div class="payline"><span>Merchant ID</span><b>${esc(merchant.merchantId || "")}</b></div>
+        <div class="payline payline--id"><span>Merchant ID</span><b>${esc(merchant.merchantId || "")}</b></div>
       </article>
     </section>
   </div>`;

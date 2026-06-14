@@ -67,7 +67,8 @@ export function accountPage(user: any, orders: any[], profile: any = { addresses
         </div>
       </div>
     </section>
-  </div>`;
+  </div>
+  ${adminFormStyles()}`;
   return layout({ title: "Mi cuenta — Meriplaza", body });
 }
 
