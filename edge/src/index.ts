@@ -140,7 +140,7 @@ app.get("/super", async (c) => {
   });
   return c.html(supermarketPage({
     ...data, q, category, selectedStores: stores, rate,
-    cities: mk.cities, categories: mk.categories, cityName: cityName || data.home.cityName || "Caracas",
+    cities: mk.cities, cityName: cityName || data.home.cityName || "Caracas",
     home, mapsKey: c.env.GOOGLE_MAPS_API_KEY || "",
   }));
 });
