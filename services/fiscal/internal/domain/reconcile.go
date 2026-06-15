@@ -5,8 +5,8 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/catalinalabs/meriplaza/libs/ident"
-	"github.com/catalinalabs/meriplaza/libs/money"
+	"github.com/catalinalabsve/meriplaza/libs/ident"
+	"github.com/catalinalabsve/meriplaza/libs/money"
 )
 
 // ValidationError aggregates all problems found while validating a draft.

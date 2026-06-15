@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/catalinalabs/meriplaza/services/fiscal/internal/domain"
-	"github.com/catalinalabs/meriplaza/services/fiscal/internal/render"
-	"github.com/catalinalabs/meriplaza/services/fiscal/internal/store"
+	"github.com/catalinalabsve/meriplaza/services/fiscal/internal/domain"
+	"github.com/catalinalabsve/meriplaza/services/fiscal/internal/render"
+	"github.com/catalinalabsve/meriplaza/services/fiscal/internal/store"
 )
 
 type Server struct {

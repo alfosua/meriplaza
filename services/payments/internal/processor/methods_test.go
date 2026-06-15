@@ -3,7 +3,7 @@ package processor
 import (
 	"testing"
 
-	"github.com/catalinalabs/meriplaza/services/payments/internal/domain"
+	"github.com/catalinalabsve/meriplaza/services/payments/internal/domain"
 )
 
 func TestPagoMovilRequiresOTPThenSucceeds(t *testing.T) {

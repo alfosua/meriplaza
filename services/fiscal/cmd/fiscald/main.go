@@ -13,9 +13,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/catalinalabs/meriplaza/libs/httpx"
-	"github.com/catalinalabs/meriplaza/services/fiscal/internal/api"
-	"github.com/catalinalabs/meriplaza/services/fiscal/internal/store"
+	"github.com/catalinalabsve/meriplaza/libs/httpx"
+	"github.com/catalinalabsve/meriplaza/services/fiscal/internal/api"
+	"github.com/catalinalabsve/meriplaza/services/fiscal/internal/store"
 )
 
 func main() {

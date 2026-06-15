@@ -6,7 +6,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/catalinalabs/meriplaza/services/payments/internal/domain"
+	"github.com/catalinalabsve/meriplaza/services/payments/internal/domain"
 )
 
 var ErrNotFound = errors.New("payment intent not found")

@@ -24,7 +24,7 @@ tolerant flows, and cheap to self-host.
   check digit). Reused by fiscal, payments KYC, and seller onboarding.
 - **`libs/httpx`** *(planned)* — shared HTTP helpers (JSON, errors, middleware).
 
-A single Go module (`github.com/catalinalabs/meriplaza`) keeps cross-product
+A single Go module (`github.com/catalinalabsve/meriplaza`) keeps cross-product
 imports trivial. Each product is a `services/<name>` package tree with its own
 `cmd/<name>d` binary and `internal/` packages, so products stay decoupled at the
 package level while sharing `libs/`.

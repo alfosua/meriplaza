@@ -8,7 +8,7 @@ package render
 import (
 	"strings"
 
-	"github.com/catalinalabs/meriplaza/services/fiscal/internal/domain"
+	"github.com/catalinalabsve/meriplaza/services/fiscal/internal/domain"
 )
 
 // Width80mm is the typical printable column count for an 80mm thermal head.

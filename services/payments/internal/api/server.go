@@ -16,9 +16,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/catalinalabs/meriplaza/services/payments/internal/domain"
-	"github.com/catalinalabs/meriplaza/services/payments/internal/processor"
-	"github.com/catalinalabs/meriplaza/services/payments/internal/store"
+	"github.com/catalinalabsve/meriplaza/services/payments/internal/domain"
+	"github.com/catalinalabsve/meriplaza/services/payments/internal/processor"
+	"github.com/catalinalabsve/meriplaza/services/payments/internal/store"
 )
 
 type Server struct {

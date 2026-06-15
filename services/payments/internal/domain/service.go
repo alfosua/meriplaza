@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/catalinalabs/meriplaza/libs/money"
+	"github.com/catalinalabsve/meriplaza/libs/money"
 )
 
 // ValidateCreate checks a create request and returns a normalized amount error

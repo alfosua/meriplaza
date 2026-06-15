@@ -13,10 +13,10 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/catalinalabs/meriplaza/libs/httpx"
-	"github.com/catalinalabs/meriplaza/services/payments/internal/api"
-	"github.com/catalinalabs/meriplaza/services/payments/internal/processor"
-	"github.com/catalinalabs/meriplaza/services/payments/internal/store"
+	"github.com/catalinalabsve/meriplaza/libs/httpx"
+	"github.com/catalinalabsve/meriplaza/services/payments/internal/api"
+	"github.com/catalinalabsve/meriplaza/services/payments/internal/processor"
+	"github.com/catalinalabsve/meriplaza/services/payments/internal/store"
 )
 
 func main() {

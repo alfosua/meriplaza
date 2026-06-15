@@ -1,4 +1,4 @@
-module github.com/catalinalabs/meriplaza
+module github.com/catalinalabsve/meriplaza
 
 go 1.26.4
 

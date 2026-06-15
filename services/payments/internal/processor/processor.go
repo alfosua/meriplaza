@@ -8,7 +8,7 @@ package processor
 import (
 	"fmt"
 
-	"github.com/catalinalabs/meriplaza/services/payments/internal/domain"
+	"github.com/catalinalabsve/meriplaza/services/payments/internal/domain"
 )
 
 // Result is what a processor returns from Confirm.

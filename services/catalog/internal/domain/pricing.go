@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/catalinalabs/meriplaza/libs/money"
+	"github.com/catalinalabsve/meriplaza/libs/money"
 )
 
 // CartItem is a buyer's requested line before pricing.
