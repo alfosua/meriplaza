@@ -95,7 +95,7 @@ export function confirm(method: Method, intent: IntentLike, now: string): Result
       return { status: "succeeded", settlement: { amount: intent.amount, reference: `AUTH-${intent.id}`, settledAt: now } };
     }
     case "quickpago": {
-      // QuickPago is SalesFactory's own one-tap wallet/checkout. The shopper is
+      // QuickPago is Meriplaza's own one-tap wallet/checkout. The shopper is
       // redirected to approve the cobro; once a QuickPago transaction reference
       // comes back the intent settles instantly. For the demo flow we accept a
       // reference (auto-supplied by the storefront) and settle immediately.

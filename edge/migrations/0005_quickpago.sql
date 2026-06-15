@@ -1,4 +1,4 @@
--- QuickPago: a separate SalesFactory product (merchant payments). It has its
+-- QuickPago: a separate Meriplaza product (merchant payments). It has its
 -- own merchants, sessions, and transactions — independent from Meriplaza's
 -- users/sellers.
 

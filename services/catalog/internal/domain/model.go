@@ -1,4 +1,4 @@
-// Package domain models the SalesFactory commerce catalog: the sellers,
+// Package domain models the Meriplaza commerce catalog: the sellers,
 // products and orders behind the "Amazon for Venezuela" marketplace and the
 // Shopify-like per-seller storefronts. Sellers range from supermarkets to
 // independent resellers, so the model keeps the seller profile rich enough to

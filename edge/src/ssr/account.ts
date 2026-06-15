@@ -218,7 +218,7 @@ export function adminPage(user: any, data: { stores: any[]; products: any[]; ord
     </section>
   </div>
   ${adminFormStyles()}`;
-  return layout({ title: "Portal de comercios — Meriplaza", body, canonical: "https://salesfactory-edge.alfosuag.workers.dev/comercios/portal" });
+  return layout({ title: "Portal de comercios — Meriplaza", body, canonical: "https://meriplaza-edge.alfosuag.workers.dev/comercios/portal" });
 }
 
 // ---- store dashboard ----

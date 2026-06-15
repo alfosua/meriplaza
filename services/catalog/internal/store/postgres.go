@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/catalinalabs/salesfactory/libs/pg"
-	"github.com/catalinalabs/salesfactory/services/catalog/internal/domain"
+	"github.com/catalinalabs/meriplaza/libs/pg"
+	"github.com/catalinalabs/meriplaza/services/catalog/internal/domain"
 )
 
 // Postgres is a durable Store. Sellers/products/orders are stored as JSONB with

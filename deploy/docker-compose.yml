@@ -1,4 +1,4 @@
-# Local / single-host deployment of the full SalesFactory platform.
+# Local / single-host deployment of the full Meriplaza platform.
 #
 #   cp deploy/.env.example deploy/.env   # then edit secrets
 #   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up --build
@@ -6,19 +6,19 @@
 # Brings up Postgres + the three Go services + the static frontend. Each service
 # runs its own migrations on startup against the shared database.
 
-name: salesfactory
+name: meriplaza
 
 services:
   db:
     image: docker.io/library/postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-salesfactory}
+      POSTGRES_USER: ${POSTGRES_USER:-meriplaza}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-salesfactory}
+      POSTGRES_DB: ${POSTGRES_DB:-meriplaza}
     volumes:
       - dbdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-salesfactory}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-meriplaza}"]
       interval: 5s
       timeout: 3s
       retries: 10

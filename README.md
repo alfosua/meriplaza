@@ -1,4 +1,4 @@
-# SalesFactory
+# Meriplaza
 
 A monorepo of Venezuela-focused commerce products on a shared Go backend and a
 lightweight (HTML/CSS/Web Components) frontend, built for low-connectivity and

@@ -1,4 +1,4 @@
-// Package httpx holds small HTTP helpers shared across SalesFactory services:
+// Package httpx holds small HTTP helpers shared across Meriplaza services:
 // authentication middleware and config helpers. It has no third-party deps so
 // every service can adopt it cheaply.
 package httpx
@@ -79,7 +79,7 @@ func BasicAuth(next http.Handler, creds Credentials, skip SkipFunc) http.Handler
 		}
 		user, pass, ok := r.BasicAuth()
 		if !ok || !credsMatch(creds, user, pass) {
-			w.Header().Set("WWW-Authenticate", `Basic realm="salesfactory"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="meriplaza"`)
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}

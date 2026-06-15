@@ -7,7 +7,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/catalinalabs/salesfactory/services/catalog/internal/domain"
+	"github.com/catalinalabs/meriplaza/services/catalog/internal/domain"
 )
 
 var ErrNotFound = errors.New("not found")

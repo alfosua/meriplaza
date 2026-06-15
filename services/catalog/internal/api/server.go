@@ -18,9 +18,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/catalinalabs/salesfactory/libs/ident"
-	"github.com/catalinalabs/salesfactory/services/catalog/internal/domain"
-	"github.com/catalinalabs/salesfactory/services/catalog/internal/store"
+	"github.com/catalinalabs/meriplaza/libs/ident"
+	"github.com/catalinalabs/meriplaza/services/catalog/internal/domain"
+	"github.com/catalinalabs/meriplaza/services/catalog/internal/store"
 )
 
 type Server struct {

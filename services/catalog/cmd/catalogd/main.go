@@ -1,4 +1,4 @@
-// Command catalogd runs the SalesFactory commerce/catalog API.
+// Command catalogd runs the Meriplaza commerce/catalog API.
 //
 // Config (env):
 //
@@ -13,9 +13,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/catalinalabs/salesfactory/libs/httpx"
-	"github.com/catalinalabs/salesfactory/services/catalog/internal/api"
-	"github.com/catalinalabs/salesfactory/services/catalog/internal/store"
+	"github.com/catalinalabs/meriplaza/libs/httpx"
+	"github.com/catalinalabs/meriplaza/services/catalog/internal/api"
+	"github.com/catalinalabs/meriplaza/services/catalog/internal/store"
 )
 
 func main() {

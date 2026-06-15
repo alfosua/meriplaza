@@ -265,11 +265,11 @@ if (SQL_ONLY) {
 }
 
 // Apply via wrangler d1 execute --file.
-const tmp = `/tmp/sf-grocery-seed-${Date.now()}.sql`;
+const tmp = `/tmp/mp-grocery-seed-${Date.now()}.sql`;
 await writeFile(tmp, sql);
 const target = REMOTE ? "--remote" : "--local";
 console.log(`Applying grocery seed (${summary}) ${target}…`);
-const res = spawnSync("npx", ["wrangler", "d1", "execute", "salesfactory", target, "--file", tmp, "--yes"], {
+const res = spawnSync("npx", ["wrangler", "d1", "execute", "meriplaza", target, "--file", tmp, "--yes"], {
   stdio: "inherit", cwd: process.cwd(),
 });
 process.exit(res.status ?? 0);

@@ -1,4 +1,4 @@
-// Cloudflare Worker that fronts the three SalesFactory containers.
+// Cloudflare Worker that fronts the three Meriplaza containers.
 //
 // Cloudflare Containers are driven by a Durable Object per container class. The
 // Worker routes by the first path segment and rewrites the URL so each Go

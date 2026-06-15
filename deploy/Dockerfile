@@ -1,6 +1,6 @@
-# Multi-stage build shared by all SalesFactory services.
+# Multi-stage build shared by all Meriplaza services.
 # Build a specific daemon with:
-#   docker build -f deploy/Dockerfile --build-arg SERVICE=fiscal -t salesfactory/fiscal .
+#   docker build -f deploy/Dockerfile --build-arg SERVICE=fiscal -t meriplaza/fiscal .
 # SERVICE maps to services/<SERVICE>/cmd/<SERVICE>d.
 #
 # The result is a tiny static binary on a distroless base — fast to pull on

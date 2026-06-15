@@ -1,4 +1,4 @@
-# Deploying SalesFactory to Cloudflare Containers
+# Deploying Meriplaza to Cloudflare Containers
 
 This deploys the three Go services as **Cloudflare Containers** behind a single
 Worker that routes by path prefix. Postgres is **not** part of Cloudflare — the
@@ -67,9 +67,9 @@ registry, and provisions the Worker + Durable Objects.
 ## Use
 
 ```
-GET  https://salesfactory.<your-subdomain>.workers.dev/healthz
-POST https://salesfactory.<your-subdomain>.workers.dev/fiscal/invoices
-POST https://salesfactory.<your-subdomain>.workers.dev/catalog/sellers
+GET  https://meriplaza.<your-subdomain>.workers.dev/healthz
+POST https://meriplaza.<your-subdomain>.workers.dev/fiscal/invoices
+POST https://meriplaza.<your-subdomain>.workers.dev/catalog/sellers
 ```
 
 (All non-storefront routes require the Basic Auth credentials from `API_USERS`.)

@@ -1,8 +1,8 @@
 {
-  // SalesFactory edge backend — Cloudflare Workers (free plan) + D1 + KV.
+  // Meriplaza edge backend — Cloudflare Workers (free plan) + D1 + KV.
   // Deploy: npm install && npm run migrate:remote && npm run deploy
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "salesfactory-edge",
+  "name": "meriplaza-edge",
   "main": "src/index.ts",
   "compatibility_date": "2025-06-01",
   "observability": { "enabled": true },
@@ -10,8 +10,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "salesfactory",
-      // Replace with the id printed by: wrangler d1 create salesfactory
+      "database_name": "meriplaza",
+      // Replace with the id printed by: wrangler d1 create meriplaza
       "database_id": "fe7bc7a2-1063-4b61-8b1b-4aee64f26d8a",
       "migrations_dir": "migrations"
     }

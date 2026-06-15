@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const UA = "MeriplazaSeed/1.0 (https://salesfactory-edge.alfosuag.workers.dev; demo)";
+const UA = "MeriplazaSeed/1.0 (https://meriplaza-edge.alfosuag.workers.dev; demo)";
 
 const TERMS = {
   corn_flour: "flour sack", ground_coffee: "ground coffee", milk_powder: "powdered milk",

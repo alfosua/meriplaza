@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/catalinalabs/salesfactory/services/fiscal/internal/domain"
+	"github.com/catalinalabs/meriplaza/services/fiscal/internal/domain"
 )
 
 // ErrNotFound is returned when an invoice id is unknown.

@@ -25,12 +25,12 @@ const QP_CSS = `
 function shell(title: string, body: string): string {
   return `<!doctype html><html lang="es-VE"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
-<meta name="description" content="QuickPago — cobra con PagoMóvil, transferencia y cripto. Un producto de SalesFactory.">
+<meta name="description" content="QuickPago — cobra con PagoMóvil, transferencia y cripto. Un producto de Meriplaza.">
 <link rel="stylesheet" href="/assets/app.css"><style>${QP_CSS}</style></head><body>
 <header class="qp-head"><div class="container"><a class="qp-logo" href="/quickpago">Quick<b>Pago</b></a>
 <div class="row" style="gap:.5rem"><a class="btn btn--ghost" href="/">Meriplaza</a><a class="btn btn--qp" href="/quickpago/portal">Portal</a></div></div></header>
 <main>${body}</main>
-<footer class="site"><div class="container"><div class="muted" style="color:#9aa4b2">QuickPago · un producto de <a href="/">SalesFactory</a> · 2026</div></div></footer>
+<footer class="site"><div class="container"><div class="muted" style="color:#9aa4b2">QuickPago · un producto de <a href="/">Meriplaza</a> · 2026</div></div></footer>
 <script src="/assets/app.js" defer></script></body></html>`;
 }
 
@@ -50,7 +50,7 @@ export function qpLanding(): string {
       <div class="qp-feat"><div class="i">🔗</div><h3>Links y QR de cobro</h3><p class="muted">Comparte un cobro por WhatsApp en segundos.</p></div>
     </div>
     <section style="text-align:center;padding:2rem 0">
-      <h2>Construido sobre la pasarela de SalesFactory</h2>
+      <h2>Construido sobre la pasarela de Meriplaza</h2>
       <p class="muted" style="max-width:52ch;margin:.4rem auto 1.2rem">El mismo motor de pagos que impulsa Meriplaza, ahora disponible para tu comercio — dentro o fuera de Meriplaza.</p>
       <a class="btn btn--qp" href="/quickpago/portal">Empezar gratis</a>
     </section>

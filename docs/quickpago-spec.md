@@ -1,6 +1,6 @@
 # QuickPago — Product Specification
 
-> A **SalesFactory** product, separate from Meriplaza. Built on the same
+> A **Meriplaza** product, separate from Meriplaza. Built on the same
 > payments engine, but with its own brand, portal, login, and data.
 
 ## 1. What it is
@@ -14,7 +14,7 @@ It is intentionally a **standalone product**: its own teal branding, its own
 authentication and session, its own data tables, and its own portal UI. It is
 not gated behind a Meriplaza account.
 
-**Live:** https://salesfactory-edge.alfosuag.workers.dev/quickpago
+**Live:** https://meriplaza-edge.alfosuag.workers.dev/quickpago
 
 ## 2. Why separate from Meriplaza
 
@@ -24,7 +24,7 @@ not gated behind a Meriplaza account.
 - **Separate trust boundary.** Distinct credentials, session cookie scoped to
   `/quickpago`, and isolated data (`qp_*` tables) — a QuickPago merchant is not a
   Meriplaza user.
-- **Reuse the engine, not the product.** Shares SalesFactory's payment
+- **Reuse the engine, not the product.** Shares Meriplaza's payment
   processors and PBKDF2 hashing, but ships its own portal and lifecycle.
 
 ## 3. Architecture
@@ -60,7 +60,7 @@ not gated behind a Meriplaza account.
   method-specific instructions, and proof submission.
 - **Transactions list** with lifecycle actions: proof submitted by payer, then
   merchant can confirm, cancel, or expire the cobro.
-- Marketing **landing page** positioning it as a SalesFactory product built on
+- Marketing **landing page** positioning it as a Meriplaza product built on
   the same gateway that powers Meriplaza.
 
 ## 6. Routes
@@ -82,9 +82,9 @@ not gated behind a Meriplaza account.
 All `/quickpago/*` routes are public at the Meriplaza auth gate; QuickPago
 enforces its own merchant auth internally via the `qp_session` cookie.
 
-## 7. Relationship to SalesFactory payments
+## 7. Relationship to Meriplaza payments
 
-QuickPago's method set mirrors the SalesFactory payment **processors**
+QuickPago's method set mirrors the Meriplaza payment **processors**
 (`pago_movil`, `transferencia`, `crypto`, …). Today QuickPago records charges and
 their lifecycle; wiring each charge through the live processors for real
 settlement (C2P confirmation, on-chain confirmation, bank reference matching) is
@@ -105,4 +105,4 @@ Demo merchant: `qp@demo.ve` / `qp123456`. Sign up a new merchant at
 ## 10. See also
 
 - [meriplaza-spec.md](meriplaza-spec.md) — the marketplace product.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — SalesFactory platform overview.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Meriplaza platform overview.

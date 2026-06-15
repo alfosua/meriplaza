@@ -1,4 +1,4 @@
-// Package money provides decimal-safe monetary values for SalesFactory.
+// Package money provides decimal-safe monetary values for Meriplaza.
 //
 // Money is stored as an integer number of minor units (e.g. cents) plus an
 // ISO-4217 currency code. This avoids binary floating-point error, which is a

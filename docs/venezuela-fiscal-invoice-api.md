@@ -194,7 +194,7 @@ Store both line-level and summary-level tax amounts to support audit trails.
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://salesfactory.local/schemas/ve-fiscal-invoice.schema.json",
+  "$id": "https://meriplaza.local/schemas/ve-fiscal-invoice.schema.json",
   "title": "Venezuela Fiscal Invoice",
   "type": "object",
   "additionalProperties": false,

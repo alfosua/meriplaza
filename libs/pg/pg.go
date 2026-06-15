@@ -1,5 +1,5 @@
 // Package pg provides a shared Postgres connection pool and a minimal,
-// idempotent migration runner used by every SalesFactory service that persists
+// idempotent migration runner used by every Meriplaza service that persists
 // state. It wraps jackc/pgx.
 package pg
 

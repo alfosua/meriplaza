@@ -1,4 +1,4 @@
-// Seed the SalesFactory edge backend with demo stores (fake users) across
+// Seed the Meriplaza edge backend with demo stores (fake users) across
 // different store kinds, each with its own catalog. Idempotent-ish: it skips a
 // seller whose handle already exists.
 //

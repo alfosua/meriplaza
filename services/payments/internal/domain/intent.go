@@ -1,4 +1,4 @@
-// Package domain defines the SalesFactory payment gateway core model.
+// Package domain defines the Meriplaza payment gateway core model.
 //
 // The gateway is built from scratch (no Stripe dependency) but borrows Stripe's
 // proven shape: a PaymentIntent represents the lifecycle of collecting a single

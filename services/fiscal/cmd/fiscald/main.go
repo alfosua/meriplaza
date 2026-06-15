@@ -1,4 +1,4 @@
-// Command fiscald runs the SalesFactory fiscal invoicing API.
+// Command fiscald runs the Meriplaza fiscal invoicing API.
 //
 // Config (env):
 //
@@ -13,9 +13,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/catalinalabs/salesfactory/libs/httpx"
-	"github.com/catalinalabs/salesfactory/services/fiscal/internal/api"
-	"github.com/catalinalabs/salesfactory/services/fiscal/internal/store"
+	"github.com/catalinalabs/meriplaza/libs/httpx"
+	"github.com/catalinalabs/meriplaza/services/fiscal/internal/api"
+	"github.com/catalinalabs/meriplaza/services/fiscal/internal/store"
 )
 
 func main() {

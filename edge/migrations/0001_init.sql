@@ -1,5 +1,5 @@
--- SalesFactory edge schema for Cloudflare D1 (SQLite).
--- Applied with: wrangler d1 migrations apply salesfactory
+-- Meriplaza edge schema for Cloudflare D1 (SQLite).
+-- Applied with: wrangler d1 migrations apply meriplaza
 
 CREATE TABLE IF NOT EXISTS sellers (
   id          TEXT PRIMARY KEY,

@@ -1,9 +1,9 @@
 {
-  // SalesFactory on Cloudflare Containers.
+  // Meriplaza on Cloudflare Containers.
   // Run `wrangler deploy` from this directory (deploy/cloudflare). The build
   // context for the Dockerfiles is the repo root, two levels up.
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "salesfactory",
+  "name": "meriplaza",
   "main": "worker.js",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat"],

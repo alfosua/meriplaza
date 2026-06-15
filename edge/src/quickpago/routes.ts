@@ -1,8 +1,8 @@
-// QuickPago — a separate SalesFactory product for merchant payments
+// QuickPago — a separate Meriplaza product for merchant payments
 // (PagoMovil, National Transfer, Crypto). It has its own auth (qp_session
 // cookie), data (qp_merchants/qp_sessions/qp_transactions), and portal UI,
 // distinct from Meriplaza. It reuses the shared PBKDF2 hashing and the
-// SalesFactory payment processors conceptually.
+// Meriplaza payment processors conceptually.
 
 import { Hono } from "hono";
 import type { Env } from "../lib/env.ts";

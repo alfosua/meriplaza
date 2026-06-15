@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/catalinalabs/salesfactory/libs/money"
-	"github.com/catalinalabs/salesfactory/services/payments/internal/domain"
+	"github.com/catalinalabs/meriplaza/libs/money"
+	"github.com/catalinalabs/meriplaza/services/payments/internal/domain"
 )
 
 // requireFields checks that the intent's MethodData carries the given keys.

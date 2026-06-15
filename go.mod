@@ -1,4 +1,4 @@
-module github.com/catalinalabs/salesfactory
+module github.com/catalinalabs/meriplaza
 
 go 1.26.4
 

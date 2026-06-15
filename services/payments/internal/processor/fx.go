@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/catalinalabs/salesfactory/libs/money"
+	"github.com/catalinalabs/meriplaza/libs/money"
 )
 
 // convertByRate converts an amount expressed in its base currency into the

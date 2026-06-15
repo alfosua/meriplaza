@@ -1,6 +1,6 @@
 # Meriplaza — Product Specification
 
-> Part of the **SalesFactory** family of Venezuela-focused commerce products.
+> Part of the **Meriplaza** family of Venezuela-focused commerce products.
 > This document summarizes what Meriplaza is, how it's built, and its current
 > state. It reflects the system as deployed, not an aspirational roadmap.
 
@@ -12,8 +12,8 @@ while each store keeps its own customizable, branded storefront (think Shopify).
 It targets **low-connectivity and constrained hardware** without sacrificing a
 beautiful, mobile-first experience.
 
-**Live:** https://salesfactory-edge.alfosuag.workers.dev
-(`salesfactory.pages.dev` 302-redirects to it).
+**Live:** https://meriplaza-edge.alfosuag.workers.dev
+(`meriplaza.pages.dev` 302-redirects to it).
 
 ## 2. Goals & principles
 
@@ -25,7 +25,7 @@ beautiful, mobile-first experience.
   background, blue + yellow accents, generous whitespace.
 - **Venezuela reality.** Bolívares + divisas + crypto, BCV exchange display,
   local delivery (Yummy/Ridery/Tango), delivery-by-city availability, SENIAT
-  fiscal invoicing (via the SalesFactory fiscal service).
+  fiscal invoicing (via the Meriplaza fiscal service).
 - **Trust never on the client.** Totals, stock, and pricing are recomputed
   server-side; money is exact (integer minor units, never float).
 
@@ -101,9 +101,9 @@ view transitions + speculation-rules prefetch.
 
 **Payments & money**
 - Methods: PagoMóvil, transferencia, divisas, punto de venta, card (US/Panamá),
-  crypto (via the SalesFactory payments engine).
+  crypto (via the Meriplaza payments engine).
 - Multi-currency display using the **BCV** reference rate (KV-cached).
-- Fiscal invoices via the SalesFactory fiscal service (SENIAT-compatible).
+- Fiscal invoices via the Meriplaza fiscal service (SENIAT-compatible).
 
 **SEO & UX**
 - Per-page title/description/canonical, Open Graph + Twitter, **JSON-LD**

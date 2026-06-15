@@ -59,7 +59,7 @@ export interface LayoutOpts {
 
 export function layout(opts: LayoutOpts): string {
   const desc = opts.description || "Meriplaza — el mercado de Venezuela. Compara precios entre tiendas y recibe con entrega local.";
-  const url = opts.canonical || "https://salesfactory-edge.alfosuag.workers.dev/";
+  const url = opts.canonical || "https://meriplaza-edge.alfosuag.workers.dev/";
   const favicon = "data:image/svg+xml," + encodeURIComponent(MARK_SVG);
   return `<!doctype html><html lang="es-VE"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -85,9 +85,9 @@ ${header(opts.header)}
     </div>
     <div><h4>Comprar</h4><ul><li><a href="/">Inicio</a></li><li><a href="/super">Supermercado</a></li><li><a href="/?category=Tecnología">Tecnología</a></li><li><a href="/?category=Alimentos">Alimentos</a></li><li><a href="/?category=Moda">Moda</a></li></ul></div>
     <div><h4>Cuenta</h4><ul><li><a href="/cuenta">Mi cuenta</a></li><li><a href="/cuenta">Mis pedidos</a></li><li><a href="/tienda/panel">Panel de tienda</a></li></ul></div>
-    <div><h4>SalesFactory</h4><ul><li><a href="/quickpago">QuickPago</a></li><li><a href="/comercios">Vender en Meriplaza</a></li><li><a href="/comercios/portal">Portal de comercios</a></li></ul></div>
+    <div><h4>Meriplaza</h4><ul><li><a href="/quickpago">QuickPago</a></li><li><a href="/comercios">Vender en Meriplaza</a></li><li><a href="/comercios/portal">Portal de comercios</a></li></ul></div>
   </div>
-  <div class="muted" style="color:#6b7280;border-top:1px solid #1f2330;margin-top:1.5rem;padding-top:1rem;font-size:.78rem">© 2026 Meriplaza · un producto de SalesFactory · Hecho en Venezuela 🇻🇪</div>
+  <div class="muted" style="color:#6b7280;border-top:1px solid #1f2330;margin-top:1.5rem;padding-top:1rem;font-size:.78rem">© 2026 Meriplaza · un producto de Meriplaza · Hecho en Venezuela 🇻🇪</div>
 </div></footer>
 <script type="speculationrules">{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":"/quickpago/api/*"}},{"not":{"selector_matches":"[data-add],[data-open-cart]"}}]},"eagerness":"moderate"}]}</script>
 <script src="/assets/app.js" defer></script>
@@ -101,7 +101,7 @@ export function sellerLandingPage(): string {
       <div>
         <span class="eyebrow">Para comercios venezolanos</span>
         <h1>Abre tu tienda en Meriplaza</h1>
-        <p>Publica productos, recibe pedidos por ciudad, cobra con SalesFactory y entrega con tus métodos locales.</p>
+        <p>Publica productos, recibe pedidos por ciudad, cobra con Meriplaza y entrega con tus métodos locales.</p>
         <div class="hero__actions">
           <a class="btn btn--accent" href="/cuenta">Crear cuenta de tienda</a>
           <a class="btn btn--ghost" href="/quickpago">Conocer QuickPago</a>
@@ -137,7 +137,7 @@ export function sellerLandingPage(): string {
     @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
     @media(max-width:760px){.hero__grid{grid-template-columns:1fr}.seller-demo{animation:none}}
   </style>`;
-  return layout({ title: "Vender en Meriplaza — Portal de comercios", body, description: "Crea una tienda en Meriplaza, cobra con SalesFactory y gestiona pedidos, envíos y facturas fiscales.", canonical: "https://salesfactory-edge.alfosuag.workers.dev/comercios" });
+  return layout({ title: "Vender en Meriplaza — Portal de comercios", body, description: "Crea una tienda en Meriplaza, cobra con Meriplaza y gestiona pedidos, envíos y facturas fiscales.", canonical: "https://meriplaza-edge.alfosuag.workers.dev/comercios" });
 }
 
 export function cartPage(cities: Array<{ slug: string; name: string; state: string }> = []): string {
@@ -434,7 +434,7 @@ export function homePage(d: HomeData): string {
     title: d.q ? `${d.q} — Meriplaza` : d.category ? `${d.category} — Meriplaza` : "Meriplaza — El mercado de Venezuela",
     body,
     header: { categories: d.categories, activeCat: d.category, q: d.q, city: d.cityName, cities: d.cities },
-    jsonLd: { "@context": "https://schema.org", "@type": "WebSite", name: "Meriplaza", url: "https://salesfactory-edge.alfosuag.workers.dev/", potentialAction: { "@type": "SearchAction", target: "https://salesfactory-edge.alfosuag.workers.dev/?q={search_term_string}", "query-input": "required name=search_term_string" } },
+    jsonLd: { "@context": "https://schema.org", "@type": "WebSite", name: "Meriplaza", url: "https://meriplaza-edge.alfosuag.workers.dev/", potentialAction: { "@type": "SearchAction", target: "https://meriplaza-edge.alfosuag.workers.dev/?q={search_term_string}", "query-input": "required name=search_term_string" } },
   });
 }
 

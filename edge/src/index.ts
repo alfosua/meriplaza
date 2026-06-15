@@ -1,4 +1,4 @@
-// SalesFactory edge backend: ecommerce + payment gateway on Cloudflare Workers
+// Meriplaza edge backend: ecommerce + payment gateway on Cloudflare Workers
 // (free plan) backed by D1 + KV. A single Worker mounts both products.
 //
 //   /catalog/*   -> sellers, products, orders (storefront reads cached in KV)
@@ -294,7 +294,7 @@ app.use("*", async (c, next) => {
        /^\/catalog\/orders\/[^/]+\/fulfillment$/.test(path) ||
        /^\/catalog\/sellers\/[^/]+\/payment-methods$/.test(path))) return next();
 
-  return c.json({ error: "unauthorized" }, 401, { "WWW-Authenticate": 'Basic realm="salesfactory"' });
+  return c.json({ error: "unauthorized" }, 401, { "WWW-Authenticate": 'Basic realm="meriplaza"' });
 });
 
 app.route("/auth", auth);

@@ -27,7 +27,7 @@ function stripJsonc(s) {
 
 function checkWrangler() {
   const cfg = JSON.parse(stripJsonc(read("wrangler.jsonc")));
-  if (cfg.name !== "salesfactory-edge") fail("wrangler name must be salesfactory-edge");
+  if (cfg.name !== "meriplaza-edge") fail("wrangler name must be meriplaza-edge");
   if (cfg.main !== "src/index.ts") fail("wrangler main must be src/index.ts");
   if (!cfg.compatibility_date) fail("wrangler compatibility_date is required");
   const d1 = cfg.d1_databases?.find((x) => x.binding === "DB");

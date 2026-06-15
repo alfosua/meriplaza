@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SalesFactory — Storefront demo</title>
+  <title>Meriplaza — Storefront demo</title>
   <style> body { margin:0; background:#fafafa; } </style>
 </head>
 <body>
   <!--
-    Demo of the <sf-storefront> web component. Point `api` at a running
+    Demo of the <mp-storefront> web component. Point `api` at a running
     catalogd (default :8083) and `handle` at a seller you created.
 
     Seed data quickly:
@@ -16,13 +16,13 @@
       # take the returned seller id, then add products:
       curl -X POST localhost:8083/sellers/<id>/products -d '{"title":"Cafe Molido 500g","price":"210.00","taxRate":"16.00","stock":12,"active":true,"description":"Cosecha andina"}'
   -->
-  <sf-storefront handle="bodega-maria" api="http://localhost:8083"></sf-storefront>
+  <mp-storefront handle="bodega-maria" api="http://localhost:8083"></mp-storefront>
 
-  <script type="module" src="./components/sf-storefront.js"></script>
+  <script type="module" src="./components/mp-storefront.js"></script>
   <script type="module">
-    // The component emits "sf-checkout" with the cart; the host app wires that
+    // The component emits "mp-checkout" with the cart; the host app wires that
     // to the payments + fiscal services. Here we just log it.
-    document.querySelector("sf-storefront").addEventListener("sf-checkout", (e) => {
+    document.querySelector("mp-storefront").addEventListener("mp-checkout", (e) => {
       console.log("checkout requested", e.detail);
       alert(`Pagar ${e.detail.total} ${e.detail.currency} (${e.detail.items.length} líneas)`);
     });

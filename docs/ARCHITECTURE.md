@@ -1,6 +1,6 @@
-# SalesFactory Platform Architecture
+# Meriplaza Platform Architecture
 
-SalesFactory is a monorepo for a group of Venezuela-focused commerce products
+Meriplaza is a monorepo for a group of Venezuela-focused commerce products
 that share infrastructure, a Go backend, and a lightweight web frontend. The
 products are designed for **low-connectivity environments and constrained POS
 hardware**: small dependency footprints, ASCII-friendly rendering, offline-
@@ -13,7 +13,7 @@ tolerant flows, and cheap to self-host.
 | Fiscal Invoicing | `services/fiscal` | **working** | SENIAT-compatible fiscal invoices; canonical model, server-side reconciliation, thermal render. |
 | Payment Gateway | `services/payments` | **working** | Stripe-like gateway built from scratch: local VE methods (pago móvil, transferencia, divisas, punto de venta), international (US/Panama), and crypto. |
 | Commerce / Catalog | `services/catalog` | **working** | "Amazon for Venezuela": sellers, products, inventory, and orders linked to payments + fiscal. |
-| Storefronts | `web/components/sf-storefront.js` | **working** | Shopify-like, customizable per-seller front as a vanilla Web Component on shared catalog infra. |
+| Storefronts | `web/components/mp-storefront.js` | **working** | Shopify-like, customizable per-seller front as a vanilla Web Component on shared catalog infra. |
 | Social Commerce | `services/catalog` (channel) + `services/social` | partial | Order `channel` + seller `socials` model WhatsApp/Instagram/Facebook today; a dedicated sync/conversational service is planned. |
 
 ## Shared libraries (`libs/`)
@@ -24,7 +24,7 @@ tolerant flows, and cheap to self-host.
   check digit). Reused by fiscal, payments KYC, and seller onboarding.
 - **`libs/httpx`** *(planned)* — shared HTTP helpers (JSON, errors, middleware).
 
-A single Go module (`github.com/catalinalabs/salesfactory`) keeps cross-product
+A single Go module (`github.com/catalinalabs/meriplaza`) keeps cross-product
 imports trivial. Each product is a `services/<name>` package tree with its own
 `cmd/<name>d` binary and `internal/` packages, so products stay decoupled at the
 package level while sharing `libs/`.
@@ -59,8 +59,8 @@ make run-payments  # payment gateway :8082
 make run-catalog   # commerce API    :8083
 ```
 
-Open `web/demo.html` (served statically) to see the `<sf-storefront>` component
-talking to `catalogd`. The component emits an `sf-checkout` event that a host
+Open `web/demo.html` (served statically) to see the `<mp-storefront>` component
+talking to `catalogd`. The component emits an `mp-checkout` event that a host
 app wires to the payments gateway and then the fiscal service.
 
 ## Persistence & auth

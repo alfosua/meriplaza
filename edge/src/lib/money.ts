@@ -1,4 +1,4 @@
-// Decimal-safe money for the SalesFactory edge backend.
+// Decimal-safe money for the Meriplaza edge backend.
 //
 // Mirrors the Go libs/money: amounts are stored as an integer number of minor
 // units (BigInt) at SCALE decimal places, never as JS number/float. Wire format

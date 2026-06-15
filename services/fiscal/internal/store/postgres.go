@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/catalinalabs/salesfactory/libs/pg"
-	"github.com/catalinalabs/salesfactory/services/fiscal/internal/domain"
+	"github.com/catalinalabs/meriplaza/libs/pg"
+	"github.com/catalinalabs/meriplaza/services/fiscal/internal/domain"
 )
 
 // Postgres is a durable Store backed by Postgres. Invoices are stored as JSONB

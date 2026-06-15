@@ -39,8 +39,8 @@ page.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
 async function snap(name, urlHash = "") {
   await page.goto(`http://localhost:${PORT}/index.html${urlHash}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(600);
-  await page.screenshot({ path: `/tmp/sf-${name}.png`, fullPage: true });
-  console.log(`saved /tmp/sf-${name}.png`);
+  await page.screenshot({ path: `/tmp/mp-${name}.png`, fullPage: true });
+  console.log(`saved /tmp/mp-${name}.png`);
 }
 
 await snap("marketplace");
